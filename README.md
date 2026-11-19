@@ -82,6 +82,23 @@ The search runs on the server, read-only (only the PET `cases` collection is rea
 If PET runs on the same Atlas cluster with its default database name, nothing needs to be set. The Atlas database user
 must be allowed to read the PET database.
 
+## Roles
+| Role in the shift schedule | Who | Access |
+|---|---|---|
+| **Incident Manager** | the team on the schedule (PET's "Support") | handles cases (auto-assigned when on shift and available) |
+| **IM Manager** | Jeff Bote, and anyone set to IM Manager | full manager access, receives no cases |
+| **Incident Manager** (full access) | June John Cruz | on the shift schedule and **receives cases** like every incident manager, except while he is the **Incident Manager POC**; has the same access as the IM Manager (settings, profiles, reports, login page, all alerts). If the uploaded schedule leaves him out he is kept on it as OFF (no cases until a shift is set) |
+| **IM Developer** | Arianne Escabillas | the same developer access she has in PET |
+
+An uploaded schedule with a Role / Position column reads "Incident Manager" as an incident manager and any other
+"manager" as IM Manager; with no role column everyone is an Incident Manager.
+
+## File names
+Every download starts with `IM_`: `IM_Weekly_Report_…`, `IM_<report name>_…`, `IM_Daily_Report_…`,
+`IM_Agent_Productivity_…`, `IM_All_Data_…`, `IM_Shift_Schedule_<month>.xlsx`, and the templates
+`IM_Shift_Schedule_Template.xlsx` (repo file `templates/IM_Shift_Schedule_Template.xlsx`, sheet "IM Team"),
+`IM_Bulk_Case_Entry_Template.xlsx` and `IM_Account_Names_Template.xlsx`.
+
 ## Incident Manager POC
 PET's *coordinator on duty* is kept and renamed **Incident Manager POC** (same behaviour): a manager / coordinator picks
 the POC in the Incident Managers & Status panel; the POC gets every alert (including station SLA pop-ups), receives no
@@ -176,7 +193,7 @@ Never commit `.env` or `secrets.toml`.
   A sound stops the moment its alert is closed, acknowledged or completed. No sound is embedded in the app.
 * **Simulation:** runs only on the screen that started it and writes nothing to the database.
 * **Shift schedule:** the PET Team layout (names in column A, SUN–SAT across the top, a time / OFF / PTO per day).
-  The *Template* button downloads `templates/PET_Shift_Schedule_Template.xlsx` from the repo (the server reads the file on every download): to change the template, replace that file on GitHub and redeploy. A built-in copy is only used if the repo file cannot be reached.
+  The *Template* button downloads `templates/IM_Shift_Schedule_Template.xlsx` from the repo (the server reads the file on every download): to change the template, replace that file on GitHub and redeploy. A built-in copy is only used if the repo file cannot be reached.
 * **Shift schedule saving:** every change (new person, name, role, each day, availability, delete, upload) is written to `config/staff` at once; a late echo of an older save can no longer overwrite a newer edit. *Export current* produces the same look as the template (dark header, orange/green shifts, pink OFF, dark-green PTO).
 * **Checklist:** *Acknowledge* opens the alarm form (documentation required) for required items and for any item that has a reminder; +1 min / +5 min / +15 min / +1 hr add up on each click; the add field clears after adding.
 * **Maintenance window:** enter the start first and set the end later (closing needs the end). Once a window exists, **Update maintenance window** records a new current window (as many times as needed): the original window and every earlier update are kept and shown as Original / Update 1, 2… / Current, and all of them appear in the report for RCA. **Edit maintenance window** only corrects the current window in place (typos).
@@ -701,7 +718,7 @@ script that is run once. They are not added to the app.
   shift time, OFF, PTO or **Absent**. Values are saved by date (`msch` on each person in the staff list; about 13 months
   are kept). A day without a monthly value falls back to the weekly pattern (shown faded).
   * **Template** downloads the monthly layout for the month shown: names in column A, the dates across row 3
-    (YYYY-MM-DD) and weekdays in row 4. `templates/PET_Shift_Schedule_Template.xlsx` and the built-in copy use the same
+    (YYYY-MM-DD) and weekdays in row 4. `templates/IM_Shift_Schedule_Template.xlsx` and the built-in copy use the same
     layout.
   * **Upload** reads that layout, keeps earlier months, and sets the weekly fallback from the month. The old 7-day
     layout still uploads as the weekly pattern.

@@ -126,7 +126,7 @@ def real_names_for(names: Any) -> Dict[str, Any]:
 
 # Downloadable templates live in the repo (templates/). The Template button reads the file from here every time,
 # so replacing the file on GitHub and redeploying is all that is needed to change the template.
-TEMPLATE_FILES = {"shift": "PET_Shift_Schedule_Template.xlsx"}
+TEMPLATE_FILES = {"shift": "IM_Shift_Schedule_Template.xlsx"}
 
 
 def read_template(name: Any) -> Dict[str, Any]:
