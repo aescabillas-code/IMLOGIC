@@ -42,8 +42,9 @@ Streamlit Community Cloud: same values in App settings → Secrets (see `.stream
   case history. The current station's field pulses amber until it is filled. The name shows under the station in the
   cases table, in the station history, in SLA pop-ups, as `{stowner}` in templates and as *Station Owners* in reports.
 * **Station & SLA card:** current station, live time in station,
-  remaining time, progress bar with the 60 % / 80 % / 100 % marks, **Move to station** (with an optional hand-off note
-  and template) and a **station history** (entered, exited, duration, SLA, Met / Missed, who moved it).
+  remaining time, progress bar with the 60 % / 80 % / 100 % marks, **Transfer to <next station>** — no drop-down: a case
+  always moves to the next station in the fixed order **WFM › CARE › ARCH › PET › SUPPLY CHAIN › FULFILLMENT** (FULFILLMENT
+  is the last; the case is closed from there) — with an optional hand-off note and template, and a **station history** (entered, exited, duration, SLA, Met / Missed, who moved it).
   Moving restarts the clock at 00:00:00; closing stops it; reopening starts a new stay in the same station.
 * **Alerts (from OVR-VW):** each stay alerts once at the warning (60 %), critical (80 %) and breached (100 %) levels.
   The station tile glows with a blinking “!” until it is clicked. A pop-up with *View Case* / *Acknowledge* goes to the
@@ -81,12 +82,21 @@ The search runs on the server, read-only (only the PET `cases` collection is rea
 If PET runs on the same Atlas cluster with its default database name, nothing needs to be set. The Atlas database user
 must be allowed to read the PET database.
 
+## Incident Manager POC
+PET's *coordinator on duty* is kept and renamed **Incident Manager POC** (same behaviour): a manager / coordinator picks
+the POC in the Incident Managers & Status panel; the POC gets every alert (including station SLA pop-ups), receives no
+cases, shows as *Unavailable · IM POC*, and approves or rejects manual case transfers.
+
 ## Templates
 * **Settings → 🧩 Templates:** add, edit, duplicate and delete templates of any type — *Activity log, Acknowledgement,
   Station transfer, Revisit, Closing, Announcement, General* — optionally for one station only. Everyone can see them;
   managers / coordinators change them. Stored in `config/atpl` (starter templates are shown until the first save).
 * Placeholders filled in when used: `{case} {account} {owner} {station} {sla} {elapsed} {sev} {status} {me} {date} {time}`.
-* **Using a template:** every place an update is written in a case has **📋 Insert template…**: the new
+* **Insert template pop-up:** **📋 Insert template…** opens a window listing every template (search box, type filter,
+  the type that fits the box shown first). Click one to see the saved template and, below it, the text filled in for this
+  case; edit that text freely (*Reset to template* undoes the edits), then **Insert**. Editing here changes only the text
+  being inserted, not the saved template (that is done in Settings → Templates).
+* **Where:** every place an update is written in a case has **📋 Insert template…**: the new
   **Log an update** box under Case History (writes an *Activity update* entry), the station hand-off note, the
   acknowledge / reminder documentation and the revisit documentation. Inserting into a box that already has text adds
   the template below it.
