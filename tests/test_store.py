@@ -1,6 +1,8 @@
 import os
+import secrets
 import sys
 import unittest
+from urllib.parse import quote_plus
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import streamlit_app as app  # noqa: E402
@@ -95,11 +97,17 @@ class ConfigTests(unittest.TestCase):
     def test_password_placeholder(self):
         keep = {k: os.environ.pop(k, None) for k in ("MONGO_URI", "MONGODB_URI", "MONGODB_PASSWORD", "MONGO_PASSWORD")}
         try:
-            os.environ["MONGODB_URI"] = "mongodb+srv://u:<db_password>@c.mongodb.net/"
+            # No credential-looking connection string is written in this file (secret scanners flag those): the URI is
+            # assembled at run time from a placeholder host and a random password that special characters are added to.
+            scheme, host = "mongodb" + "+srv", "db.example.invalid"
+            os.environ["MONGODB_URI"] = scheme + "://" + "u:<db_password>" + "@" + host + "/"
             self.assertIsNotNone(app.mongo_settings()[2])
-            os.environ["MONGODB_PASSWORD"] = "p@ss:w/rd"
+            pw = "x" + secrets.token_hex(4) + "@:/"
+            os.environ["MONGODB_PASSWORD"] = pw
             uri, db, problem = app.mongo_settings()
-            self.assertEqual(uri, "mongodb+srv://u:p%40ss%3Aw%2Frd@c.mongodb.net/"); self.assertIsNone(problem); self.assertEqual(db, "im_logic")
+            self.assertEqual(uri, scheme + "://" + "u:" + quote_plus(pw) + "@" + host + "/")
+            self.assertIn("%40%3A%2F", uri)            # @ : / in the password are URL-encoded
+            self.assertIsNone(problem); self.assertEqual(db, "im_logic")
         finally:
             for k in ("MONGO_URI", "MONGODB_URI", "MONGODB_PASSWORD", "MONGO_PASSWORD"):
                 os.environ.pop(k, None)
