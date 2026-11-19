@@ -56,9 +56,9 @@ class ExecuteTests(unittest.TestCase):
         import pathlib
 
         r = app.execute(self.s, "template", {"name": "shift"})
-        disk = (pathlib.Path(app.__file__).resolve().parent / "templates" / "PET_Shift_Schedule_Template.xlsx").read_bytes()
+        disk = (pathlib.Path(app.__file__).resolve().parent / "templates" / "IM_Shift_Schedule_Template.xlsx").read_bytes()
         self.assertEqual(base64.b64decode(r["b64"]), disk)
-        self.assertEqual(r["name"], "PET_Shift_Schedule_Template.xlsx")
+        self.assertEqual(r["name"], "IM_Shift_Schedule_Template.xlsx")
         self.assertTrue(app.execute(self.s, "template", {"name": "../secrets"}).get("missing"))
 
     def test_assets(self):
