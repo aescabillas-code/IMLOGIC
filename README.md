@@ -23,12 +23,13 @@ Streamlit Community Cloud: same values in App settings → Secrets (see `.stream
 |---|---|
 | WFM | 15 min |
 | CARE | 15 min |
+| PSE | 30 min |
 | ARCH | 30 min |
 | PET | 45 min |
 | SUPPLY CHAIN | 30 min |
 | FULFILLMENT | 120 min |
 
-* **Station tiles** (dashboard, under the stat cards): open cases per station with *On / Near / Past* SLA counts. Click a
+* **Station tiles** (dashboard, under the stat cards): open cases per station with *On / Near / Past* SLA counts (and *⏸ n* for cases on Customer Hold). Click a
   tile to show only that station's cases (click again, or the chip beside the case count, to show all).
 * **Cases table:** new *Station* and *Station SLA* columns. The live clock shows the time in the current station
   with a green check, amber / red “!” or a blinking red triangle (breached). Search also matches the station.
@@ -37,13 +38,13 @@ Streamlit Community Cloud: same values in App settings → Secrets (see `.stream
   incident manager on shift by the uploaded shift schedule and status (round robin, queue, hand-overs at EOS).
 * **Case window order:** status bar → incident manager (owner) → Case Information + Transfer → **PET Station lookup** →
   Case Details → **Station & SLA** → Work / Part Orders → Revisit → Checklists → Case History.
-* **Station owners:** inside Station & SLA, one name field per station — *WFM on duty*, *CARE case owner*, *ARCH case
-  owner*, … — suggested from the shift schedule and names used before, saved when you leave the field and written to the
+* **Station owners:** inside Station & SLA, one name field per station — *WFM on duty*, *CARE case owner*, *PSE case
+  owner*, *ARCH case owner*, … — suggested from the shift schedule and names used before, saved when you leave the field and written to the
   case history. The current station's field pulses amber until it is filled. The name shows under the station in the
   cases table, in the station history, in SLA pop-ups, as `{stowner}` in templates and as *Station Owners* in reports.
 * **Station & SLA card:** current station, live time in station,
   remaining time, progress bar with the 60 % / 80 % / 100 % marks, **Transfer to <next station>** — no drop-down: a case
-  always moves to the next station in the fixed order **WFM › CARE › ARCH › PET › SUPPLY CHAIN › FULFILLMENT** (FULFILLMENT
+  always moves to the next station in the fixed order **WFM › CARE › PSE › ARCH › PET › SUPPLY CHAIN › FULFILLMENT** (FULFILLMENT
   is the last; the case is closed from there) — with an optional hand-off note and template, and a **station history** (entered, exited, duration, SLA, Met / Missed, who moved it).
   Moving restarts the clock at 00:00:00; closing stops it; reopening starts a new stay in the same station.
 * **Alerts (from OVR-VW):** each stay alerts once at the warning (60 %), critical (80 %) and breached (100 %) levels.
@@ -57,17 +58,42 @@ Streamlit Community Cloud: same values in App settings → Secrets (see `.stream
 * **Reports:** report builder columns *Current Station*, *Time in Current Station*, *Station SLA (min)*,
   *Station SLA Status* and *Station History*.
 
-Case fields added: `station`, `stAt` (entered current station), `stEnd` (clock stopped at close), `stH` (finished stays),
-`stO` (station owners), `petRef` (linked PET case). Older cases without a station are shown in WFM, timed from when they
+Case fields added: `station`, `stAt` (entered current station), `stEnd` (clock stopped at close), `stH` (finished stays,
+with `p` = time on hold), `stO` (station owners), `petRef` (linked PET case), `stP` (time on hold in the current station),
+`hold` (Customer Hold: linked checklist item and when the hold started), `petChk` (PET checklist, view only). Older cases without a station are shown in WFM, timed from when they
 were received.
+
+## Case status
+The case status list starts with **Ongoing, Pending, Monitoring, Customer Hold**, followed by PET's statuses (FE Name,
+Tracking Number, Service Window, Scheduled, TR2, Resolved, Canceled; CSR only cases: Ordered, Escalated, Shipped,
+Delivered). The status shows as a coloured badge in the cases table, can be filtered, and appears in reports and the bulk
+case template.
+
+### Customer Hold
+* Choosing **Customer Hold** opens a pop-up that links the hold to a checklist item with an alarm: either an open item
+  that already has a future alarm, or a new checklist item with its alarm time (plus an optional reason).
+* From then the **station clock stops** (time in station and remaining time freeze, no SLA alerts). The table shows
+  *⏸ Paused · resumes <time>*, the Station & SLA card shows the hold with a **Resume now** button, and the checklist item
+  is tagged *Customer Hold alarm*.
+* When that alarm goes off, the status goes back to **Ongoing** by itself and the clock runs again. The alarm still rings
+  as a normal reminder for the owner.
+* Choosing another status, removing the alarm or deleting the item ends the hold at once. A transfer while on hold keeps
+  the case paused in the next station until the alarm. Closing ends the hold.
+* The time on hold is kept (case history, station history *“on hold, not counted”*) and is never counted against the
+  station SLA (Met / Missed, SLA met %, average time in station).
 
 ## PET Station lookup
 In the case window, **PET Station lookup** searches the PET Station (PAT) database by case number, SFDC Case ID or RITM
 (the search box starts with the case number). Every matching PET case is listed (case, account, SFDC / RITM, severity /
-status, PET owner, open / closed, received); **Use this case** copies its case details into the IM•LOGIC case — case
-type, Aruba / AT&T numbers, SFDC IDs, RITM, severity, case status, model, lift, Cabling/HOD, account, store, maintenance
-windows, part ordered / delivered and CE arrival times, CSR only, work / part orders, revisit, high priority. The checklist,
-owner and stations are not touched. The case keeps the link (PET owner, PET status, PET checklist progress); **Refresh
+status, PET owner, open / closed, received); **Use this case** copies everything from the PET case into the IM•LOGIC case —
+case type, Aruba / AT&T numbers, SFDC IDs, RITM, severity, case status, model, lift, Cabling/HOD, account, store, the
+**maintenance window and its updates**, **part ordered / part delivered / CE arrival dates**, CSR only, work / part
+orders, revisit, SLA / delay reason, high priority, and the **PET checklist with its alarms — view only**. The PET
+checklist is shown inside the PET Station lookup card (done / open, *PET required*, alarm time, acknowledged by and the
+PET documentation). It is kept apart from the IM checklist (`petChk`): **PET alarms never ring in IM•LOGIC**, never count
+as due reminders, never block closing and cannot be ticked or acknowledged here; a refresh updates the list. IM's own
+checklist items, the owner and the stations are not touched. An empty
+PET status never clears the IM status, and a case on Customer Hold keeps that status until its alarm. The case keeps the link (PET owner, PET status, PET checklist progress); **Refresh
 from PET** copies the latest values again, and a linked open case refreshes by itself when it is opened (at most every
 2 minutes; only changes are written to the history).
 
@@ -119,14 +145,27 @@ cases, shows as *Unavailable · IM POC*, and approves or rejects manual case tra
   the template below it.
 
 ## Login page & profile
-The login picture, faces and profiles are still PET's. Replace them once the app is up in
-**Settings → 🎨 Theme → Login page (DIY)** (picture + face boxes) and **Settings → 👤 Profiles**.
+The PET team photos are gone. The login page shows a neutral IM•LOGIC picture with a seat at every former face
+position, so claiming a seat, passwords, sign-up and email sign-in work exactly as before. The IM Manager, June John
+Cruz, Arianne Escabillas and the Director keep their fixed seats; every other seat is open. Replace the picture with your
+team's photo in **Settings → 🎨 Theme → Login page (DIY)** (picture + face boxes) and manage people in **Settings → 👤 Profiles**.
+
+## PET-only items removed
+* Built-in name merges (*Arianne May Escabillas → Arianne Escabillas*, *Bonnylet → Bonylett Manalo*). Managers can still
+  record two spellings of one person in Settings → Profiles → *Same person, two names*.
+* PET's front-row managers (Joerolyn Franquelli, Jose Teves): no longer built-in managers or fixed seats, and the
+  *Quiet alerts* list starts empty.
+* The PET team photos (login picture, mobile picture, side strips) — about 0.7 MB smaller page.
+* PET greetings in the seasonal countdown now come from the Incident Management Team; the test alert uses `IM-TEST-0001`.
+* The built-in sample schedule (used only until a schedule is uploaded) still lists the PET agents' names.
+
+The older notes further down this file describe the PET Station app this was built from.
 
 ## Tests
 ```bash
 python -m unittest discover -s tests -v
 node tests/shim_integration.js      # PET engine end to end
-node tests/stations_sync.js         # stations, moves, owners, PET copy, activity updates, SLA settings and templates across two screens
+node tests/stations_sync.js         # stations (incl. PSE), moves, owners, PET pull (checklist + alarms), Customer Hold, updates, SLA settings, templates across two screens
 ```
 
 # Inherited from PET Station (PAT)

@@ -667,6 +667,7 @@ def make_store() -> Tuple[MemStore, Optional[str]]:
 PET_FIELDS = ("caseType", "hp", "arubaNo", "attNo", "sfdc", "ritm", "sev", "cstatus", "model", "lift", "cable", "mw", "mwUp",
               "account", "store", "pOrd", "pDel", "ceArr", "csr", "recv", "orders", "revisit", "owner", "closed", "closedAt",
               "sla", "ts")
+PET_ITEM_FIELDS = ("id", "text", "done", "rem", "req", "by", "at", "doneBy", "doneAt", "editedBy", "editedAt")
 _PET: Dict[str, Any] = {"coll": None, "err": None, "at": 0.0, "db": ""}
 _PET_LOCK = threading.Lock()
 
@@ -719,6 +720,8 @@ def pet_shape(doc: Dict[str, Any]) -> Dict[str, Any]:
             out[k] = doc[k]
     items = [i for i in (doc.get("items") or []) if isinstance(i, dict)]
     out["chk"] = [sum(1 for i in items if i.get("done")), len(items)]
+    # the PET checklist with its reminder alarms (copied into the IM case as items marked "PET")
+    out["items"] = [{k: i[k] for k in PET_ITEM_FIELDS if k in i} for i in items if i.get("id") and str(i.get("text") or "").strip()][:200]
     return json.loads(json.dumps(out, default=str))
 
 
