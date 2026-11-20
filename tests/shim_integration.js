@@ -94,7 +94,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   const schedOk = sched === JSON.stringify([true, true, false, false, true, false, false]);
   let tplOk = true;
   try {
-    const rows = JSON.parse(cp.execFileSync(process.env.PYTHON || 'python3', ['-c', "import json,openpyxl;ws=openpyxl.load_workbook('" + path.join(root, 'templates/IM_Shift_Schedule_Template.xlsx') + "')['PET Team'];print(json.dumps([[('' if c.value is None else str(c.value)) for c in r] for r in ws.iter_rows()]))"]).toString());
+    const rows = JSON.parse(cp.execFileSync(process.env.PYTHON || 'python3', ['-c', "import json,openpyxl;ws=openpyxl.load_workbook('" + path.join(root, 'templates/IM_Shift_Schedule_Template.xlsx') + "')['IM Team'];print(json.dumps([[('' if c.value is None else str(c.value)) for c in r] for r in ws.iter_rows()]))"]).toString());
     A.ctx.__aoa = rows; A.ctx.XLSX = { utils: { sheet_to_json: () => rows } };
     const got = JSON.parse(A.run("(()=>{const g=monthRows({SheetNames:['PET Team'],Sheets:{'PET Team':{}}});return JSON.stringify({n:g.out.length,keys:g.keys.length,first:g.keys[0],last:g.keys[g.keys.length-1],name:g.out[0].name})})()"));
     tplOk = got.n === 2 && got.keys === 31 && got.first === '2026-12-01' && got.last === '2026-12-31' && got.name === 'First Last';

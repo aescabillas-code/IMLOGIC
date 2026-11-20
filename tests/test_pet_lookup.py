@@ -42,7 +42,10 @@ class FakeColl:
 
 DOCS = [
     {"_id": "AR-100200", "caseType": "aruba", "arubaNo": "AR-100200", "sfdc": ["5001", "5002"], "ritm": "RITM77", "sev": "Sev 2",
-     "owner": "Kenjie Locsin", "closed": False, "recv": 2, "items": [{"done": True}, {"done": False}], "dft": {"x": 1}, "wk": {}},
+     "owner": "Kenjie Locsin", "closed": False, "recv": 2, "pOrd": 11, "pDel": 12, "ceArr": 13, "mw": {"s": 20, "e": 30}, "mwUp": [{"s": 21, "e": 31}],
+     "items": [{"id": "i1", "text": "Required reminder", "req": True, "done": True, "rem": {"at": 5, "done": {"text": "ok"}}, "secret": 1},
+               {"id": "i2", "text": "Call the store", "done": False, "rem": {"at": 9, "text": "call"}}, {"done": False, "text": "no id"}],
+     "dft": {"x": 1}, "wk": {}},
     {"_id": "AR-1002001", "caseType": "aruba", "arubaNo": "AR-1002001", "sfdc": ["5003"], "owner": "Karen", "closed": True, "recv": 1},
     {"_id": "F-9", "caseType": "foundation", "sfdc": ["SFDC-555"], "owner": "Haina", "recv": 3},
 ]
@@ -62,10 +65,18 @@ class PetLookupTests(unittest.TestCase):
 
     def test_shape_keeps_case_info_only(self):
         x = app.pet_lookup("5001", self.coll)["items"][0]
-        self.assertEqual(x["chk"], [1, 2])
+        self.assertEqual(x["chk"], [1, 3])
         self.assertEqual(x["sfdc"], ["5001", "5002"])
         self.assertNotIn("dft", x)
-        self.assertNotIn("items", x)
+        self.assertEqual((x["pOrd"], x["pDel"], x["ceArr"]), (11, 12, 13))     # part ordered / delivered, CE arrival
+        self.assertEqual((x["mw"], x["mwUp"]), ({"s": 20, "e": 30}, [{"s": 21, "e": 31}]))   # maintenance window + updates
+
+    def test_checklist_and_alarms_are_sent(self):
+        x = app.pet_lookup("5001", self.coll)["items"][0]
+        self.assertEqual([i["id"] for i in x["items"]], ["i1", "i2"])          # items without an id are left out
+        self.assertEqual(x["items"][1]["rem"], {"at": 9, "text": "call"})      # the alarm comes with the item
+        self.assertTrue(x["items"][0]["req"])
+        self.assertNotIn("secret", x["items"][0])
 
     def test_too_short_and_special_characters(self):
         with self.assertRaises(app.ApiError):

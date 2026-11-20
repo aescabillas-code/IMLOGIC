@@ -330,7 +330,7 @@ let A; const setv = (id, v) => { A.ctx.document.getElementById(id).value = v; };
   check('a transferred case stays in the first agent\'s daily count', A.run("credOf(CASES[0]).n")===A.run("__o")&&A.run("dayN(__o,simNow())")>=1);
 
   // ---------- statuses, same-case-number merge, daily trend ----------
-  check('case statuses are FE Name, Tracking Number, Service Window, Scheduled, TR2, Resolved, Canceled', JSON.stringify(A.run("CSTAT"))===JSON.stringify(['FE Name','Tracking Number','Service Window','Scheduled','TR2','Resolved','Canceled']));
+  check('case statuses are Ongoing, Pending, Monitoring, Customer Hold, then FE Name, Tracking Number, Service Window, Scheduled, TR2, Resolved, Canceled', JSON.stringify(A.run("CSTAT"))===JSON.stringify(['Ongoing','Pending','Monitoring','Customer Hold','FE Name','Tracking Number','Service Window','Scheduled','TR2','Resolved','Canceled']));
   check('a legacy "Scheduled TR2" status is read as Scheduled', A.run("cx({cstatus:'Scheduled TR2'}).cstatus")==='Scheduled');
   A.run("ACCOUNTS=['Account A','Account Z'];BKM=bkParse([['Case Type','Case Number','Account Name','Received on PET Queue','SFDC Case ID(s)','Model Number'],['Aruba','AR-5000','Account A','2026-11-10 09:30','5001','' ],['Aruba','AR-5000','Account A','2026-11-10 09:30','5002','AP-635'],['Aruba','AR-5000','Account A','2026-11-10 09:30','5001,5003',''],['Aruba','AR-5001','Account A','2026-11-10 10:00','6001',''],['Aruba','AR-5000','Account Z','2026-11-10 09:30','5009','']]);");
   check('rows with the same Aruba case number are combined into one case', A.run("BKM.rows.filter(r=>!r.errs.length).length")===2 && A.run("BKM.merged")===2);
@@ -555,8 +555,8 @@ let A; const setv = (id, v) => { A.ctx.document.getElementById(id).value = v; };
   const P = client({ role: null, name: '' });
   await P.run('initDb()'); await sleep(2500);
   check('the login page opens when nobody is signed in', P.run('MEASKED') === true);
-  check('the two front-row managers are always in the schedule', P.run("STAFF.some(p=>p.name==='Joerolyn Franquelli'&&p.role==='IM Manager')&&STAFF.some(p=>p.name==='Jose Teves'&&p.role==='IM Manager')") === true);
-  check('front-row faces belong to the managers', P.run("seatName('m1')") === 'Joerolyn Franquelli' && P.run("seatName('m2')") === 'Jose Teves');
+  check('the PET front-row managers are gone (not added to the schedule)', P.run("STAFF.some(p=>/Joerolyn|Jose Teves/.test(p.name))") === false && P.run("MGR_NAMES.some(n=>/Joerolyn|Jose Teves/.test(n))") === false);
+  check('the two front-row seats are open seats now', P.run("seatName('m1')") === '' && P.run("seatName('m2')") === '');
   check('every other face starts without a name or profile', P.run("SEAT_IDS.filter(i=>!MGR_SEATS[i]).every(i=>!seatName(i))") === true);
   check('16 team faces + 2 managers + 3 Vendor Management Team faces + the Director, 21 clickable on the mobile picture', P.run('SEAT_IDS.length') === 22 && P.run('SEAT_IDS.filter(i=>SEAT_GEO[i].length>4).length') === 21);
   check('June John Cruz (Incident Manager) keeps his face, receives cases and has IM Manager access', P.run("seatName('j1')") === 'June John Cruz' && P.run("STAFF.some(p=>p.name==='June John Cruz'&&p.role==='Incident Manager'&&!isMgr(p)&&isFA(p.name))") === true);
@@ -587,10 +587,10 @@ let A; const setv = (id, v) => { A.ctx.document.getElementById(id).value = v; };
   check('a wrong password does not open the profile', P.run('ME.role') === null);
   sv(P, 'lp-pw', 'pw1234'); await P.run('lpVerify()');
   check('the right password opens it', P.run('ME.name') === 'Karen Sabile');
-  P.run("ME={role:null,name:''}"); P.run("lpSeat('m2')");
-  check('a face without a password asks if you want to set one', P.run('LP.v') === 'offer' && P.run('LP.name') === 'Jose Teves');
-  P.run("lpEnter('Jose Teves')");
-  check('a front-row manager signs in as a manager', P.run('ME.role') === 'manager' && P.run('ME.name') === 'Jose Teves');
+  P.run("ME={role:null,name:''}"); P.run("lpSeat('j2')");
+  check('a face without a password asks if you want to set one', P.run('LP.v') === 'offer' && P.run('LP.name') === 'Jeff Bote');
+  P.run("lpEnter('Jeff Bote')");
+  check('the IM Manager signs in as a manager', P.run('ME.role') === 'manager' && P.run('ME.name') === 'Jeff Bote');
   P.run("ME={role:null,name:''}"); P.run('viewSignUp()');
   sv(P, 'lp-nm', 'Karen Sabile'); sv(P, 'lp-em', 'k@hpe.com'); sv(P, 'lp-pw', 'secret12'); sv(P, 'lp-pw2', 'secret12'); await P.run('lpSignUp()');
   check('a name on the shift schedule cannot sign up', String(P.els['lp-err'].textContent).includes('shift schedule') && P.run('ACCTS.length') === 0);
@@ -608,7 +608,7 @@ let A; const setv = (id, v) => { A.ctx.document.getElementById(id).value = v; };
   // coordinators
   P.run("ME={role:'agent',name:'Karen Sabile'}"); P.run("toggleCoord('Karen Sabile',true)");
   check('only a manager can assign coordinators', P.run('COORDS.length') === 0);
-  P.run("ME={role:'manager',name:'Jose Teves'}");
+  P.run("ME={role:'manager',name:'Jeff Bote'}");
   P.run("toggleCoord('Haina Azuela',true)");
   check('a coordinator needs a profile that already exists', P.run("isCoordName('Haina Azuela')") === false);
   P.run("toggleCoord('Karen Sabile',true)"); P.run("toggleCoord('Maria Santos',true)"); await sleep(1500);
@@ -619,12 +619,13 @@ let A; const setv = (id, v) => { A.ctx.document.getElementById(id).value = v; };
   check('a signed-in profile becomes coordinator when a manager assigns it', Q.run('ME.coord') === true && Q.run('isLead()') === true && Q.run('meKey()') === Q.run('ME.name'));
   P.run("ME={role:null,name:''}"); P.run("lpEnter('Karen Sabile')");
   check('signing in as an assigned coordinator gives the coordinator role', P.run('ME.coord') === true && String(P.run('meLabel()')).startsWith('Coordinator'));
-  P.run("ME={role:'manager',name:'Jose Teves'}"); P.run("toggleCoord('Karen Sabile',false)"); await sleep(3000);
+  P.run("ME={role:'manager',name:'Jeff Bote'}"); P.run("toggleCoord('Karen Sabile',false)"); await sleep(3000);
   check('removing the coordinator role takes effect on the signed-in screen', Q.run('ME.coord') === false && Q.run('isLead()') === false);
-  P.run("ME={role:'manager',name:'Jose Teves'}"); P.run("relSeat('Karen Sabile')"); await sleep(1500);
+  P.run("ME={role:'manager',name:'Jeff Bote'}"); P.run("relSeat('Karen Sabile')"); await sleep(1500);
   check('a manager can release a face so it can be claimed again', P.run("seatName('s3')") === '');
-  P.run("ME={role:'manager',name:'Jose Teves'}"); P.run("sDel(STAFF.findIndex(p=>p.name==='Jose Teves'))");
-  check('the front-row managers cannot be removed from the schedule', P.run("STAFF.some(p=>p.name==='Jose Teves')") === true);
+  P.run("ME={role:'manager',name:'Jeff Bote'}"); P.run("sDel(STAFF.findIndex(p=>p.name==='Jeff Bote'))");
+  check('the IM Manager cannot be removed from the schedule', P.run("STAFF.some(p=>p.name==='Jeff Bote')") === true);
+  check('the PET team photos are gone: the login picture is the IM•LOGIC seat picture', /id="landing-img" alt="IM•LOGIC sign-in: choose your seat" draggable="false" src="data:image\/svg\+xml;base64,/.test(fs0) && /id="landing-img-m" alt="" aria-hidden="true" draggable="false" src="data:image\/svg\+xml;base64,/.test(fs0) && !/lext\.[lr]\{[^}]*url\(data:image\/jpeg/.test(fs0));
   check('login page has the web and mobile pictures with 18 faces', (fs0.match(/id="landing-img"/g) || []).length === 1 && (fs0.match(/id="landing-img-m"/g) || []).length === 1);
   check('login page has no close button', !fs0.includes('id="l-close"'));
 
@@ -1050,7 +1051,7 @@ let A; const setv = (id, v) => { A.ctx.document.getElementById(id).value = v; };
   }
   // ---------- login page DIY, seasonal design, 8-hour sign-out ----------
   {
-    A.run("ME={role:'manager',name:'Jose Teves'};applyMe();LAND=null;LAND_SIG='';applyLanding()");
+    A.run("ME={role:'manager',name:'Jeff Bote'};applyMe();LAND=null;LAND_SIG='';applyLanding()");
     check('the built-in picture is used when no DIY picture is saved', A.run('SEAT_IDS.length') === 22 && A.run("seatName('j1')") === 'June John Cruz');
     A.run("SEATS={s3:{name:'Haina Azuela'}};landSnap({web:{url:'data:image/png;base64,AAAA',w:1000,h:500},mob:null,faces:[{id:'s3',g:[100,100,40,50],m:null,name:''},{id:'f1',g:[300,200,40,50],m:null,name:'Jose Teves'},{id:'f2',g:[500,200,40,50],m:null,name:''}],ts:1})");
     check('a saved DIY picture replaces the faces on the login page', A.run('SEAT_IDS.join()') === 's3,f1,f2' && A.run('LPD.w') === 1000);
@@ -1110,7 +1111,7 @@ let A; const setv = (id, v) => { A.ctx.document.getElementById(id).value = v; };
   }
   // ---------- seasonal login picture, fairy lights, naughty-list Santa ----------
   {
-    A.run("ME={role:'manager',name:'Jose Teves'};applyMe();localStorage.removeItem('pat_fx_off');FXOFF=null;SSN={kind:'christmas',from:'01-01',to:'12-31'}");
+    A.run("ME={role:'manager',name:'Jeff Bote'};applyMe();localStorage.removeItem('pat_fx_off');FXOFF=null;SSN={kind:'christmas',from:'01-01',to:'12-31'}");
     A.run("landSnap(null,{kind:'christmas',web:{url:'data:image/png;base64,BBBB',w:800,h:400},mob:null,faces:[{id:'s1',g:[100,100,40,50],m:null,name:''},{id:'m1',g:[300,100,40,50],m:null,name:'Joerolyn Franquelli'}],ts:2})");
     check('during the season the seasonal login picture is shown', A.run('SEAT_IDS.join()') === 's1,m1' && A.run('LPD.w') === 800);
     A.run("SSN={kind:'christmas',from:'02-01',to:'02-02'};applyLanding()");
@@ -1164,14 +1165,14 @@ let A; const setv = (id, v) => { A.ctx.document.getElementById(id).value = v; };
   check('alert pop-ups get lights and elves placed only in empty space around the card', htmlSrc.includes('function alertDeco()') && htmlSrc.includes(".ad-deco.side .ad-write{display:block}") && htmlSrc.includes(".ad-deco.below .ad-drag{display:block}") && htmlSrc.includes('.ad-deco{position:fixed;pointer-events:none'));
   check('decorations never cover text: lights get their own space in headers and the header text makes room for the elf', htmlSrc.includes('body.ssn-lights .modal-hdr{padding-bottom:24px!important}') && htmlSrc.includes('body.ssn-lights #case-body .cch{padding-top:24px}') && htmlSrc.includes('#case-modal .modal-hdr>div.flex{padding-right:70px}'));
   check('more lights: along the tiles row and on the welcome cards', htmlSrc.includes("r.className='ssn-row'") && htmlSrc.includes("${lightsOn()?fairyHtml(22,2):''}"));
-  check('the countdown greets from the Partner Engagement Team and Vendor Management Team', htmlSrc.includes('Merry Christmas from the Partner Engagement Team and Vendor Management Team!'));
+  check('the countdown greets from the Incident Management Team (no PET team names)', htmlSrc.includes('Merry Christmas from the Incident Management Team!') && !htmlSrc.includes('Partner Engagement'));
   check('the login picture is extended to fill any screen without cropping (all four sides)', ['lx-t','lx-b','lx-l','lx-r'].every(k => htmlSrc.includes('class="lx ' + k + '"')) && htmlSrc.includes('function lpExtend()') && htmlSrc.includes('function lpGaps()'));
   check('at Christmas the login page edges get vines and poinsettias', htmlSrc.includes('function lpXmas(on)') && A.run('BOUQ').includes('url(#pr)') && A.run('VINE_H').includes('<path d="M0 30 C40 8'));
   {
-    A.run("ME={role:'manager',name:'Jose Teves'};applyMe();setTabTo('shift')");
+    A.run("ME={role:'manager',name:'Jeff Bote'};applyMe();setTabTo('shift')");
     const sh = String(A.els['set-body'].innerHTML);
-    check('IM Manager / IM Developer are not in the shift schedule table; June John Cruz (Incident Manager) is', sh.includes('value="June John Cruz"') && !sh.includes('value="Jeff Bote"') && !sh.includes('value="Arianne Escabillas"') && sh.includes('value="Jose Teves"'));
-    check('everyone else stays in the schedule and profiles', A.run("STAFF.some(p=>p.name==='Jose Teves')&&STAFF.some(p=>p.name==='Joerolyn Franquelli')") === true);
+    check('IM Manager / IM Developer are not in the shift schedule table; June John Cruz (Incident Manager) is', sh.includes('value="June John Cruz"') && !sh.includes('value="Jeff Bote"') && !sh.includes('value="Arianne Escabillas"'));
+    check('the PET front-row managers are not added back to the schedule', A.run("STAFF.some(p=>/Joerolyn|Jose Teves/.test(p.name))") === false);
     A.run("ME={role:'agent',name:'Haina Azuela'};applyMe();CASES.length=0;CASES.push(mkCase('NW-X1','Haina Azuela',{nw:1}),mkCase('NW-X2','Kenjie Locsin',{nw:1}));localStorage.removeItem(nwKey());NWSEEN=null");
     check('a new case shows as New for its owner before the click', A.run("isNew(getCase('NW-X1'))") === true);
     A.run("openCaseModal('NW-X1');hide('case-modal');openId=null");
@@ -1187,14 +1188,10 @@ let A; const setv = (id, v) => { A.ctx.document.getElementById(id).value = v; };
     const T = m => { m = ((m % 1440) + 1440) % 1440; return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); };
     const nowM = A.run('minOf(simNow())');
     const ag = (name, a, b) => ({ name, role: 'Support', start: T(nowM + a), end: T(nowM + b), days: [1, 1, 1, 1, 1, 1, 1], status: 'available' });
-    A.run('STAFF=' + JSON.stringify([ag('Arianne May Escabillas', -100, 300), ag('On Olga', -100, 300)]) + ';ensureMgrs(STAFF);STAFFLOADED=true');
-    check('Arianne May Escabillas and Arianne Escabillas are one profile (IM Developer)', A.run("STAFF.filter(p=>/Arianne/.test(p.name)).map(p=>p.name+'|'+p.role).join()") === 'Arianne Escabillas|IM Developer');
-    A.run('STAFF=' + JSON.stringify([ag('Arianne May Escabillas', -100, 300), { name: 'Arianne Escabillas', role: 'Vendor Management Team - Developer' }, ag('On Olga', -100, 300)]) + ';ensureMgrs(STAFF)');
-    check('when both names were saved, only the merged profile is kept', A.run("STAFF.filter(p=>/Arianne/.test(p.name)).length") === 1);
-    A.run("ME={role:'agent',name:'Arianne May Escabillas'};CASES.length=0;CASES.push(mkCase('AR-1','Arianne May Escabillas',{}),mkCase('AR-2','Arianne May Escabillas',{}));PROFILE_HASHES[profileKey('Arianne May Escabillas')]='h1';aliasFix()");
-    check('signed in under the old name: now signed in as Arianne Escabillas with manager access', A.run('ME.name') === 'Arianne Escabillas' && A.run("ME.role") === 'manager');
-    check('her password moves to the merged profile', A.run("PROFILE_HASHES[profileKey('Arianne Escabillas')]") === 'h1' && !A.run("PROFILE_HASHES[profileKey('Arianne May Escabillas')]"));
-    check('her open cases go to the agents on shift (the Vendor Management Team is not on the schedule)', A.run("CASES.every(c=>c.owner==='On Olga')") === true);
+    check('no PET name merges are built in any more', A.run("canon('Arianne May Escabillas')") === 'Arianne May Escabillas' && A.run("canon('Bonnylet Manalo')") === 'Bonnylet Manalo' && A.run("Object.keys(ALIAS_ALL).length") === 0);
+    A.run("aliasApply({'Arianne May Escabillas':'Arianne Escabillas'})");
+    check('a manager can still record "Same person, two names" in Settings', A.run("canon('Arianne May Escabillas')") === 'Arianne Escabillas');
+    A.run("aliasApply({})");
     check('the default team list uses the merged name', !htmlSrc.includes("{name:'Arianne May Escabillas'"));
   }
   // ---------- rules checklist applied ----------
@@ -1656,7 +1653,9 @@ let A; const setv = (id, v) => { A.ctx.document.getElementById(id).value = v; };
     check('what is being typed is kept in the browser and put back after a reload', htmlSrc.includes("document.addEventListener('input',draftInput,true)") && htmlSrc.includes('function draftRestore()') && htmlSrc.includes("try{draftRestore()}catch(e){}"));
     // quiet alerts
     A.run("ME={role:'agent',name:'Joerolyn Franquelli'};applyMe()");
-    check('Joerolyn Franquelli and Jose Teves get no alarms or alert pop-ups (announcements still pop up)', A.run('quietMe()') === true && A.run("isQuiet('Jose Teves')") === true && A.run("(()=>{const ss=syncSound;syncSound=()=>{};ASND={};alertSound('rem-pop','rem',true);const a=!ASND['rem-pop'];alertSound('ann-pop','ann',false);const b=!!ASND['ann-pop'];ASND={};syncSound=ss;return a&&b})()") === true);
+    check('the quiet list starts empty (no PET names)', A.run('quietList().length') === 0 && A.run('quietMe()') === false);
+    A.run("ME={role:'manager',name:'Jeff Bote'};quietSet('Joerolyn Franquelli',true);quietSet('Jose Teves',true);ME={role:'agent',name:'Joerolyn Franquelli'};applyMe()");
+    check('people put on the quiet list get no alarms or alert pop-ups (announcements still pop up)', A.run('quietMe()') === true && A.run("isQuiet('Jose Teves')") === true && A.run("(()=>{const ss=syncSound;syncSound=()=>{};ASND={};alertSound('rem-pop','rem',true);const a=!ASND['rem-pop'];alertSound('ann-pop','ann',false);const b=!!ASND['ann-pop'];ASND={};syncSound=ss;return a&&b})()") === true);
     A.run("ME={role:'agent',name:'Cd Amy'};applyMe()");
     check('everyone else still gets them', A.run('quietMe()') === false);
     A.run("ME={role:'manager',name:'Jeff Bote'};applyMe();setTabTo('prof')");
@@ -1845,8 +1844,9 @@ let A; const setv = (id, v) => { A.ctx.document.getElementById(id).value = v; };
     check('a closed case is tagged to the agent who closed it', A.run("getCase('CL-3').owner") === 'Cl Ben' && A.run("getCase('CL-3').closedBy") === 'Cl Ben' && A.run("getCase('CL-3').closed") === true);
     A.run("(()=>{ME={role:'manager',name:'Jeff Bote'};applyMe();const e=mkCase('CL-4','Cl Amy',{});e.closed=true;e.closedAt=Date.now()-3600000;e.closedBy='Cl Amy';e.owner='Cl Ben';e.ownh=[{n:'Cl Amy',at:Date.now()-7200000},{n:'Cl Ben',at:Date.now()-60000}];CASES.push(e);fixClosedOwners()})()");
     check('closed cases moved after closing (before the fix) go back to the agent who closed them', A.run("getCase('CL-4').owner") === 'Cl Amy');
-    check('Bonnylet Manalo and Bonylett Manalo are the same person (schedule name kept)', A.run("canon('Bonnylet Manalo')") === 'Bonylett Manalo' && A.run("canon('bonnylet  manalo')") === 'Bonylett Manalo' && A.run("canonCase({owner:'Bonnylet Manalo',credits:[{n:'Bonnylet Manalo',at:1}],items:[]}).credits[0].n") === 'Bonylett Manalo');
-    check('the schedule keeps one Bonylett Manalo', A.run("(()=>{const l=[{name:'Bonnylet Manalo',start:'06:00',end:'15:00',days:[1,1,1,1,1,1,1]},{name:'Bonylett Manalo',start:'06:00',end:'15:00',days:[1,1,1,1,1,1,1]}];ensureMgrs(l);return l.filter(p=>/manalo/i.test(p.name)).map(p=>p.name).join('|')})()") === 'Bonylett Manalo');
+    A.run("aliasApply({'Bonnylet Manalo':'Bonylett Manalo'})");
+    check('two spellings recorded in Settings are the same person (schedule name kept)', A.run("canon('Bonnylet Manalo')") === 'Bonylett Manalo' && A.run("canon('bonnylet  manalo')") === 'Bonylett Manalo' && A.run("canonCase({owner:'Bonnylet Manalo',credits:[{n:'Bonnylet Manalo',at:1}],items:[]}).credits[0].n") === 'Bonylett Manalo');
+    A.run("aliasApply({})");
     check('region from the schedule: 06:00 APJ, 14:00 EMEA, 22:00 AMS', A.run("[regionOfSched({start:'06:00',end:'15:00',days:[1,1,1,1,1,0,0]}),regionOfSched({start:'14:00',end:'23:00',days:[1,1,1,1,1,0,0]}),regionOfSched({start:'22:00',end:'07:00',days:[1,1,1,1,1,0,0]})].join()") === 'APJ,EMEA,AMS');
     A.run("RGH={};STAFF=[{name:'Rg Ann',role:'Support',start:'06:00',end:'15:00',days:[1,1,1,1,1,1,1],status:'available'}];STAFF.forEach(p=>p.sch=mkSch(p));rghUpdate();window.__t1=Date.now();RGH['Rg Ann'][0].at=0;STAFF[0].start='14:00';STAFF[0].end='23:00';STAFF[0].sch=mkSch(STAFF[0]);rghUpdate()");
     check('a schedule change does not move earlier records to the new region', A.run("regionAt('Rg Ann',__t1-86400000)") === 'APJ' && A.run("regionAt('Rg Ann',Date.now()+1000)") === 'EMEA');
@@ -1872,7 +1872,7 @@ let A; const setv = (id, v) => { A.ctx.document.getElementById(id).value = v; };
   {
     const lab = n => A.run(`ME={role:'manager',name:${JSON.stringify(n)}};meLabel()`);
     check('header shows June John Cruz as Incident Manager', lab('June John Cruz') === 'Incident Manager · June John Cruz');
-    check('header shows Arianne (May) Escabillas as IM Developer', lab('Arianne Escabillas') === 'IM Developer · Arianne Escabillas' && A.run("roleTitle('Arianne May Escabillas')") === 'IM Developer');
+    check('header shows Arianne Escabillas as IM Developer', lab('Arianne Escabillas') === 'IM Developer · Arianne Escabillas');
     check('Jeff Bote is IM Manager; other managers are IM Manager', lab('Jeff Bote') === 'IM Manager · Jeff Bote' && A.run("roleTitle('Someone Else')") === 'IM Manager');
     check('Auditor and Developer keep manager access', A.run("ME={role:'manager',name:'June John Cruz'};isLead()") === true && A.run("ME={role:'manager',name:'Arianne Escabillas'};isLead()") === true);
     check('developer-only: another manager cannot clear the Developer password', A.run("ME={role:'manager',name:'Jeff Bote'};devGuard('Arianne Escabillas')") === true && A.run("ME={role:'manager',name:'Arianne Escabillas'};devGuard('Arianne Escabillas')") === false);
