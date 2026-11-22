@@ -150,6 +150,59 @@ position, so claiming a seat, passwords, sign-up and email sign-in work exactly 
 Cruz, Arianne Escabillas and the Director keep their fixed seats; every other seat is open. Replace the picture with your
 team's photo in **Settings → 🎨 Theme → Login page (DIY)** (picture + face boxes) and manage people in **Settings → 👤 Profiles**.
 
+## Nov 22
+* **Linked PET cases follow PET on their own.** Every few seconds IM•LOGIC asks which linked PET cases were saved in PET
+  since its last check (PET stamps each save) and applies only those (`pet_sync`). A maintenance window start or end,
+  CE arrival, part dates, status or checklist changed in PET after linking now shows in IM•LOGIC within about 6–10 s,
+  also on a case that is not open, with one history line per change. (Before, IM•LOGIC re-read PET only when the case
+  was opened, at most every 2 minutes, so a window entered in PET later did not show.)
+* **Messages between IM•LOGIC and PET Station:** a recorded thread per linked case, in the PET Station lookup card
+  (💬 *Messages with PET*). PET's replies show within a few seconds, a 💬 badge marks new PET messages on the dashboard
+  row, and both directions are written to the case history. The thread is kept in the PET database
+  (`im_pet_bridge.py`, shared unchanged by both apps). PET's side: see [`pet_bridge/README.md`](pet_bridge/README.md).
+  The IM•LOGIC database user for PET (`PET_MONGODB_URI`) needs write access to the PET database for this.
+* **More PET-only code removed:** the built-in sample schedule no longer lists the PET agents (only June John Cruz and
+  Jeff Bote until the IM shift schedule is uploaded); PET's *coordinator* wording is now *IM POC* everywhere on screen
+  (stored keys unchanged); the simulation announcement says IM•LOGIC; code that was never used is gone.
+* Real time re-checked on the live test host: a change shows on another screen in about 0.6–0.75 s, in place.
+
+## Real time without visible redraws (Nov 21)
+* **In-place screen updates.** The dashboard, the open case and Settings are no longer rebuilt when data changes: the new
+  content is compared with what is on screen and only what differs is changed (`domSet` in the page). The box being typed
+  in, typed text not saved yet, scroll positions, open drop-downs, hover and animations stay as they are.
+* **Faster updates from other screens:** while a page is in use it asks the server for news every 0.4 s (idle or in a
+  background tab once a second, as before). Measured on the live test host: a change shows on another screen's open case
+  in about 0.6 s and on its dashboard in about 0.75 s (it was 1.1–1.3 s). Saves are sent at once, as before.
+* **The open case follows other screens while you type elsewhere in it**; it waits only 0.6 s after a key press, or while a
+  drop-down / date picker is open.
+* **Saved as you type:** station owner names are saved while they are typed (one history line when the field is left);
+  text in *Log an update* and the hand-off note is kept on the device while typed, so a refresh or a lost connection never
+  loses it (it comes back when the case is opened and is cleared once added).
+* **Refresh in the background:** *Clear cache and refresh data* (Settings → Timezone & Data) clears this browser's copies
+  and reads everything again in place — the page is not reloaded. Reconnecting to the database is done by the server in
+  the background, as before.
+
+## Fixes (Nov 21)
+* **Nothing is lost when several people save the same case.** A save writes only the fields that screen changed (never an
+  older copy of a field someone else changed), and lists — checklist, work orders, maintenance window updates, status
+  history — are merged item by item on the server (`__base` in a patch, `arr_merge` in `streamlit_app.py`). Before, two
+  people adding checklist items close together could wipe each other's item, which looked like only one person
+  (e.g. the IM POC) could add items.
+* **Real time in the open case.** Changes from other screens now show in an open case even while the cursor sits in a
+  box; the redraw waits only while someone is actually typing (1.5 s) or has a drop-down / date picker open. Typed text
+  and the cursor are kept.
+* **The schedule is never reverted.** Every staff save merges the newest saved schedule with only what that screen
+  changed; no screen saves before the shared schedule has loaded; a newer schedule that arrived during a save is taken
+  right after it; a save that never answers stops blocking after 20 s.
+* **Settings keeps its scroll position** (sideways and up/down) when data from other screens redraws the open tab.
+* **Agents are detected when they sign in with their HPE email**: someone on the shift schedule is signed in as that
+  agent (or manager), not as a plain team member, so attendance, Available, hand-overs and new cases see them. Name
+  spellings with different case, accents or a middle name are matched to the schedule (first + last name, when unique).
+* **Maintenance window from PET:** read from `mw` {s,e} or {start,end}, `mws`/`mwe`, or the dates typed in PET but not
+  saved there yet (PET draft). Database dates, text dates and seconds are all converted; an empty PET window never
+  clears the IM window.
+* After deploying, **refresh every open IM•LOGIC tab** so no screen keeps running the older code.
+
 ## PET-only items removed
 * Built-in name merges (*Arianne May Escabillas → Arianne Escabillas*, *Bonnylet → Bonylett Manalo*). Managers can still
   record two spellings of one person in Settings → Profiles → *Same person, two names*.
@@ -157,7 +210,7 @@ team's photo in **Settings → 🎨 Theme → Login page (DIY)** (picture + face
   *Quiet alerts* list starts empty.
 * The PET team photos (login picture, mobile picture, side strips) — about 0.7 MB smaller page.
 * PET greetings in the seasonal countdown now come from the Incident Management Team; the test alert uses `IM-TEST-0001`.
-* The built-in sample schedule (used only until a schedule is uploaded) still lists the PET agents' names.
+* The built-in sample schedule (used only until a schedule is uploaded) — removed Nov 22.
 
 The older notes further down this file describe the PET Station app this was built from.
 
@@ -165,6 +218,7 @@ The older notes further down this file describe the PET Station app this was bui
 ```bash
 python -m unittest discover -s tests -v
 node tests/shim_integration.js      # PET engine end to end
+python tests/live_host.py . 8765 &    # then: node tests/live_realtime.js 8765 ; node tests/live_pet_sync.js (see file) ; node tests/live_bridge.js (see file) ; node tests/live_sync_fixes.js 8765 ; node tests/live_race.js 8765
 node tests/stations_sync.js         # stations (incl. PSE), moves, owners, PET pull (checklist + alarms), Customer Hold, updates, SLA settings, templates across two screens
 ```
 
@@ -968,6 +1022,18 @@ The schedule that was overwritten must be uploaded again once, after this update
   after the page arrives. On Streamlit Cloud, an app that has gone to sleep still needs its wake-up time first; that
   part can't be changed from the app.
 - Test: `tests/test_mongo_cache.py` (only changed collections re-read; attendance not sent).
+
+## Keep-awake fixed (Nov 22)
+- The workflow uses the **Google Chrome already on GitHub's runners** (no browser download or system packages, the step
+  that breaks most often); Playwright's own Chromium is installed only if Chrome is missing, and that step can't fail
+  the run.
+- `tools/keep_awake.py` clicks *Yes, get this app back up!* wherever it shows (page or inner frame, also again while the
+  app starts) and reports the app awake only when the app itself has loaded (IM•LOGIC's own page, Streamlit's `stApp`,
+  or Streamlit's health check answering `ok`), not just Streamlit Cloud's outer frame.
+- Three attempts of up to 4 minutes. A failed run prints a clear error and keeps a screenshot and the page text as the
+  **keep-awake-debug** artifact of the run (Actions → the run → Artifacts).
+- Needs the repository secret **`APP_URL`** in the IM•LOGIC repository (it is not shared with the PET repository):
+  Settings → Secrets and variables → Actions → New repository secret, value = the IM•LOGIC app's address.
 
 ## Keep-awake (Nov 18, 08:45)
 

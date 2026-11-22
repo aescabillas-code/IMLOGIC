@@ -22,6 +22,8 @@ import base64
 import collections
 import copy
 import hmac
+import datetime
+import im_pet_bridge as bridge
 import json
 import os
 import pathlib
@@ -550,6 +552,11 @@ class MongoStore(MemStore):
         self._run(lambda: self.db[c].replace_one({"_id": i}, dict(doc, _updated=now_ms()), upsert=True))
         self._bump(c, i)
 
+    def get_fresh(self, c, i, fields=None):
+        proj = {f: 1 for f in fields} if fields else None
+        d = self._run(lambda: self.db[c].find_one({"_id": i}, proj))
+        return {k: v for k, v in d.items() if k != "_id"} if d else None
+
     def patch(self, c, i, fields):
         r = self._run(lambda: self.db[c].update_one({"_id": i}, {"$set": dict(fields, _updated=now_ms())}))
         if r.matched_count == 0:
@@ -687,6 +694,9 @@ def pet_settings() -> Tuple[Optional[str], str, Optional[str]]:
 
 
 def pet_collection():
+    fake = os.environ.get("PET_FAKE_FILE")   # tests only: PET cases kept in a shared file
+    if fake:
+        return bridge.FakeDB(fake)["cases"]
     with _PET_LOCK:
         if _PET["coll"] is not None:
             return _PET["coll"]
@@ -722,7 +732,32 @@ def pet_shape(doc: Dict[str, Any]) -> Dict[str, Any]:
     out["chk"] = [sum(1 for i in items if i.get("done")), len(items)]
     # the PET checklist with its reminder alarms (copied into the IM case as items marked "PET")
     out["items"] = [{k: i[k] for k in PET_ITEM_FIELDS if k in i} for i in items if i.get("id") and str(i.get("text") or "").strip()][:200]
-    return json.loads(json.dumps(out, default=str))
+    # maintenance window dates typed in PET but not saved there yet (PET keeps them as a draft until its button is used)
+    mw, dft = doc.get("mw"), doc.get("dft")
+    f = dft.get("f") if isinstance(dft, dict) else None
+    if isinstance(f, dict) and f.get("mw-s") and not (isinstance(mw, dict) and (mw.get("s") or mw.get("start"))):
+        out["mwDraft"] = {"s": str(f.get("mw-s")), "e": str(f.get("mw-e") or "")}
+    return json.loads(json.dumps(_plain(out), default=str))
+
+
+def _plain(v: Any) -> Any:
+    """Database dates become epoch milliseconds (naive dates are UTC), other database number types become numbers."""
+    if isinstance(v, dict):
+        return {k: _plain(x) for k, x in v.items()}
+    if isinstance(v, (list, tuple)):
+        return [_plain(x) for x in v]
+    if isinstance(v, datetime.datetime):
+        d = v if v.tzinfo else v.replace(tzinfo=datetime.timezone.utc)
+        return int(d.timestamp() * 1000)
+    if v is not None and not isinstance(v, (str, int, float, bool)):
+        for conv in (int, float):
+            try:
+                n = conv(str(v)) if type(v).__name__ in ("Int64", "Decimal128", "Decimal") else None
+                if n is not None:
+                    return n
+            except (TypeError, ValueError):
+                pass
+    return v
 
 
 def pet_query(q: Any) -> Dict[str, Any]:
@@ -743,6 +778,42 @@ def pet_lookup(q: Any, coll: Any = None) -> Dict[str, Any]:
             _PET.update(coll=None, err=f"PET database not reachable ({ex.__class__.__name__})", at=time.time())
         raise ApiError("failed_precondition", _PET["err"])
     return {"items": [pet_shape(d) for d in docs], "db": _PET.get("db") or "pet_station"}
+
+
+def pet_sync(ids: Any, since: Any, coll: Any = None) -> Dict[str, Any]:
+    """Linked PET cases saved in PET since `since` (all of them when since is 0). Every IM screen asks every few seconds,
+    so a change made in PET (maintenance window, CE arrival, status, checklist…) shows in IM•LOGIC on its own."""
+    ids = [str(i).strip()[:120] for i in (ids if isinstance(ids, list) else [])[:300] if str(i or "").strip()]
+    if not ids:
+        return {"items": [], "now": now_ms()}
+    try:
+        since = int(float(since or 0))
+    except (TypeError, ValueError):
+        since = 0
+    q: Dict[str, Any] = {"_id": {"$in": ids}}
+    if since > 0:
+        q["_updated"] = {"$gt": since - 120000}   # 2 min overlap: the PET and IM servers' clocks may differ a little
+    coll = coll if coll is not None else pet_collection()
+    try:
+        docs = list(coll.find(q).limit(300))
+    except Exception as ex:  # noqa: BLE001
+        with _PET_LOCK:
+            _PET.update(coll=None, err=f"PET database not reachable ({ex.__class__.__name__})", at=time.time())
+        raise ApiError("failed_precondition", _PET["err"])
+    items = []
+    for d in docs:
+        x = pet_shape(d)
+        x["upd"] = int(d.get("_updated") or 0) if str(d.get("_updated") or "0").isdigit() else 0
+        items.append(x)
+    return {"items": items, "now": now_ms()}
+
+
+def pet_db() -> Any:
+    """The PET database (bridge_links / bridge_msgs live there). BRIDGE_FAKE_FILE: a shared file store for tests."""
+    fake = os.environ.get("BRIDGE_FAKE_FILE")
+    if fake:
+        return bridge.FakeDB(fake)
+    return pet_collection().database
 
 
 def pet_get(i: Any, coll: Any = None) -> Dict[str, Any]:
@@ -774,6 +845,66 @@ def _id(doc_id: Any) -> str:
     if not isinstance(doc_id, str) or not DOCID_RE.match(doc_id):
         raise ApiError("invalid_argument", "Invalid document id")
     return doc_id
+
+
+MERGE_FIELDS = ("items", "orders", "mwUp", "sh", "stH", "hist", "ownh", "credits")
+_MERGE_LOCK = threading.RLock()
+
+
+def _mkey(x: Any) -> str:
+    if isinstance(x, dict) and x.get("id") is not None:
+        return "i:" + str(x["id"])
+    return "j:" + json.dumps(x, sort_keys=True, separators=(",", ":"), default=str)
+
+
+def arr_merge(base: Any, loc: Any, rem: Any) -> Any:
+    """Three-way merge of a list saved by one screen: rem (what is saved now) + what that screen changed between base
+    (the copy it started from) and loc (its copy now). Two screens adding checklist items at the same moment both keep
+    their items; a delete or an edit made on one screen is kept as well."""
+    if not isinstance(base, list) or not isinstance(loc, list):
+        return loc
+    out = [copy.deepcopy(x) for x in (rem if isinstance(rem, list) else [])]
+    same = lambda a, b: json.dumps(a, sort_keys=True, default=str) == json.dumps(b, sort_keys=True, default=str)
+    bmap = {_mkey(x): x for x in base}
+    lkeys = {_mkey(x) for x in loc}
+
+    def pos(k: str) -> int:
+        for n, x in enumerate(out):
+            if _mkey(x) == k:
+                return n
+        return -1
+    for x in loc:
+        k = _mkey(x)
+        if k not in bmap:
+            if pos(k) < 0:
+                out.append(copy.deepcopy(x))
+        elif not same(bmap[k], x):
+            n = pos(k)
+            if n >= 0:
+                out[n] = copy.deepcopy(x)
+            else:
+                out.append(copy.deepcopy(x))
+    for x in base:
+        k = _mkey(x)
+        if k not in lkeys:
+            n = pos(k)
+            if n >= 0:
+                out.pop(n)
+    return out
+
+
+def merged_patch(store: Any, c: str, i: str, fields: Dict[str, Any], base: Any) -> bool:
+    """Apply a patch; list fields named in base are merged with the saved list first (one save at a time)."""
+    base = {k: v for k, v in (base or {}).items() if k in MERGE_FIELDS and isinstance(v, list) and isinstance(fields.get(k), list)} if isinstance(base, dict) else {}
+    if not base:
+        return store.patch(c, i, fields)
+    with _MERGE_LOCK:
+        cur = store.get_fresh(c, i, list(base)) if hasattr(store, "get_fresh") else store.get(c, i)
+        if cur is None:
+            return False
+        for k, b in base.items():
+            fields[k] = arr_merge(b, fields[k], cur.get(k))
+        return store.patch(c, i, fields)
 
 
 def _body(data: Any) -> Dict[str, Any]:
@@ -816,7 +947,9 @@ def execute(store: MemStore, op: str, a: Dict[str, Any]) -> Any:
         return {"id": i, "version": store.version(c)}
     if op == "patch":
         c, i = _coll(a.get("c")), _id(a.get("id"))
-        if not store.patch(c, i, _body(a.get("data"))):
+        data = dict(a.get("data") or {}) if isinstance(a.get("data"), dict) else a.get("data")
+        base = data.pop("__base", None) if isinstance(data, dict) else None
+        if not merged_patch(store, c, i, _body(data), base):
             raise ApiError("not_found", "Document not found")
         return {"id": i, "version": store.version(c)}
     if op == "delete":
@@ -848,6 +981,16 @@ def execute(store: MemStore, op: str, a: Dict[str, Any]) -> Any:
         return pet_lookup(a.get("q"))
     if op == "pet_get":
         return pet_get(a.get("id"))
+    if op == "pet_sync":
+        return pet_sync(a.get("ids"), a.get("since"))
+    if op.startswith("bridge_"):
+        side = "IM"
+        if os.environ.get("BRIDGE_TEST_SIDE") and a.get("side") in bridge.SIDES:   # tests only: post as the PET app
+            side = a["side"]
+        try:
+            return bridge.execute(pet_db(), op, a, side)
+        except bridge.BridgeError as ex:
+            raise ApiError(ex.code, str(ex))
     raise ApiError("invalid_argument", f"Unknown operation: {op}")
 
 
