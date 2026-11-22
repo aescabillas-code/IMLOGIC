@@ -57,6 +57,9 @@ Streamlit Community Cloud: same values in App settings → Secrets (see `.stream
   time in station). Stored in `config/stations`.
 * **Reports:** report builder columns *Current Station*, *Time in Current Station*, *Station SLA (min)*,
   *Station SLA Status* and *Station History*.
+* **Troubleshooting only** (tick box in the Station & SLA card, case field `tso`): when such a case is transferred from
+  PSE it goes straight to FULFILLMENT, skipping ARCH, PET and SUPPLY CHAIN. The tick, and the stations skipped on the
+  transfer, are written to the case history. Unticked, the case follows the normal order.
 
 Case fields added: `station`, `stAt` (entered current station), `stEnd` (clock stopped at close), `stH` (finished stays,
 with `p` = time on hold), `stO` (station owners), `petRef` (linked PET case), `stP` (time on hold in the current station),
