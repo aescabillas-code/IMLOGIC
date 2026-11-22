@@ -16,6 +16,8 @@ py.stdout.on('data', d => { buf += d; let i; while ((i = buf.indexOf('\n')) >= 0
 const askPy = (sid, value) => new Promise(r => { waiters.push(r); py.stdin.write(JSON.stringify({ sid, value }) + '\n'); });
 
 let SID = 0;
+const WK = r => [0, 1, 2, 3, 4, 5, 6].map(d => r.includes(d) ? 0 : 1);
+const SAMPLE_TEAM = [{ name: 'June John Cruz', role: 'Incident Manager', shift: 'Morning', start: '06:00', end: '14:00', days: WK([0, 1]) }, { name: 'Kenjie Locsin', role: 'Incident Manager', shift: 'Morning', start: '06:00', end: '14:00', days: WK([3, 4]) }, { name: 'Karen Sabile', role: 'Incident Manager', shift: 'Afternoon', start: '14:00', end: '22:00', days: WK([0, 1]) }, { name: 'Jonathan Gaspar', role: 'Incident Manager', shift: 'Afternoon', start: '14:00', end: '22:00', days: WK([2, 3]) }, { name: 'Arianne Escabillas', role: 'Incident Manager', shift: 'Afternoon', start: '14:00', end: '22:00', days: WK([5, 6]) }, { name: 'Haina Azuela', role: 'Incident Manager', shift: 'Night', start: '22:00', end: '06:00', days: WK([1, 2]) }, { name: 'Lucille Layug', role: 'Incident Manager', shift: 'Night', start: '22:00', end: '06:00', days: WK([4, 5]) }, { name: 'Jeff Bote', role: 'IM Manager', shift: 'Day', start: '08:00', end: '17:00', days: WK([0, 6]) }];
 function client(me) {
   const sid = 's' + (++SID), handlers = [];
   const els = {};
@@ -45,6 +47,8 @@ function client(me) {
   ctx.window = ctx;
   vm.runInContext(shim, ctx);
   vm.runInContext(app, ctx);
+  // test data: the app ships without a team until a schedule is uploaded; these checks use this sample team
+  vm.runInContext("STAFF=" + JSON.stringify(SAMPLE_TEAM) + ";STAFF.forEach(p=>{p.sch=mkSch(p)});ensureMgrs(STAFF);", ctx);
   // the app always opens on the profile page and does not restore a saved profile; the test signs in as `me` directly
   vm.runInContext('ME=' + JSON.stringify(me) + ';applyMe();', ctx);
   return { ctx, run: c => vm.runInContext(c, ctx), els };
@@ -616,9 +620,9 @@ let A; const setv = (id, v) => { A.ctx.document.getElementById(id).value = v; };
   check('the Profiles tab lists profiles with coordinator boxes', String(P.run('profTab()')).includes('Release face') && String(P.run('profTab()')).includes('toggleCoord'));
   const Q = client({ role: 'agent', name: 'Karen Sabile', coord: false });
   await Q.run('initDb()'); await sleep(2500);
-  check('a signed-in profile becomes coordinator when a manager assigns it', Q.run('ME.coord') === true && Q.run('isLead()') === true && Q.run('meKey()') === Q.run('ME.name'));
+  check('a signed-in profile can be IM POC when a manager ticks it', Q.run('ME.coord') === true && Q.run('isLead()') === true && Q.run('meKey()') === Q.run('ME.name'));
   P.run("ME={role:null,name:''}"); P.run("lpEnter('Karen Sabile')");
-  check('signing in as an assigned coordinator gives the coordinator role', P.run('ME.coord') === true && String(P.run('meLabel()')).startsWith('Coordinator'));
+  check('signing in as someone ticked IM POC shows "IM POC" in the header', P.run('ME.coord') === true && String(P.run('meLabel()')).startsWith('IM POC'));
   P.run("ME={role:'manager',name:'Jeff Bote'}"); P.run("toggleCoord('Karen Sabile',false)"); await sleep(3000);
   check('removing the coordinator role takes effect on the signed-in screen', Q.run('ME.coord') === false && Q.run('isLead()') === false);
   P.run("ME={role:'manager',name:'Jeff Bote'}"); P.run("relSeat('Karen Sabile')"); await sleep(1500);
@@ -1710,7 +1714,7 @@ let A; const setv = (id, v) => { A.ctx.document.getElementById(id).value = v; };
     check('a status change (EOS, Available, aux) is written onto the newest saved schedule, never this screen\'s older copy', d.status === 'unavailable' && d.reason === 'EOS' && d.msch && d.msch['2026-12-01'] === '14:00-23:00' && d.sch[1] === '14:00-23:00', JSON.stringify(d));
     A.run('wq=__wq;DBON=__db0');
     check('the automatic EOS aux, availability, aux reasons, idle sign-in and coordinator on duty all save status only', (htmlSrc.match(/saveStatus\(/g) || []).length >= 6 && !/eosAux=e;chn\.push\(p\.name\);ch=true\}\}\);\nif\(ch\)\{if\(!SIMON\)saveStaff/.test(htmlSrc));
-    check('a newer schedule from another screen is never ignored because of a computer\'s clock', htmlSrc.includes("mine=!!STAFFT||STAFF_BUSY>0;if(Array.isArray(l)&&l.length)STAFF_DOC=dd;") && !htmlSrc.includes('(dd.ts||0)<STAFF_TS'));
+    check('a newer schedule from another screen is never ignored because of a computer\'s clock', htmlSrc.includes("mine=staffMine();if(Array.isArray(l)&&l.length)STAFF_DOC=dd;") && htmlSrc.includes("function staffMerge(") && !htmlSrc.includes('(dd.ts||0)<STAFF_TS'));
     check('the screen that runs the hand-over is chosen on the server\'s clock', htmlSrc.includes('function eosLeader(){if(SIMON||!DBON||!dbq||!MYID)return true;if(window.__petCacheOnly)return false;const now=srvNow();') && typeof A.run('srvNow()') === 'number');
   }
   // ---------- Nov 18: COD aux, transfer several cases, cached copy after a reload ----------
