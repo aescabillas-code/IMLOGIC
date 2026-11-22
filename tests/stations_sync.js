@@ -104,6 +104,18 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   A.run("['PSE','ARCH','PET','SUPPLY CHAIN','FULFILLMENT','x'].forEach(()=>stnMove('IM-TEST-1'))"); await sleep(3500);
   check('transfers follow WFM › CARE › PSE › ARCH › PET › SUPPLY CHAIN › FULFILLMENT and stop at the last station', B.run("getCase('IM-TEST-1').stH.map(h=>h.s).concat([getCase('IM-TEST-1').station]).join('>')") === 'WFM>CARE>PSE>ARCH>PET>SUPPLY CHAIN>FULFILLMENT');
   check('time on hold is kept in the CARE stay and not counted', B.run("(h=>h.s==='CARE'&&h.p>2000&&segSecs(h)*1000<h.e-h.a)(getCase('IM-TEST-1').stH[1])") === true);
+  // Troubleshooting only: from PSE straight to FULFILLMENT (ARCH, PET and SUPPLY CHAIN skipped)
+  A.run('openAdd()'); A.run("document.getElementById('add-id').value='IM-TEST-2';document.getElementById('add-recv').value='2026-11-06T09:00'"); A.run('addCase()'); await sleep(2500);
+  A.run("stnMove('IM-TEST-2');stnMove('IM-TEST-2')"); await sleep(2500);
+  check('a case that is not troubleshooting only still goes PSE › ARCH next', A.run("getCase('IM-TEST-2').station") === 'PSE' && A.run("stnNextFor(getCase('IM-TEST-2'),'PSE')") === 'ARCH');
+  A.run("openCaseModal('IM-TEST-2');stnTso('IM-TEST-2',true)"); await sleep(3000);
+  check('"Troubleshooting only" ticked on one screen is saved for the other', B.run("getCase('IM-TEST-2').tso") === true && /Troubleshooting only/.test(A.run("document.getElementById('case-body').innerHTML")));
+  check('…and the transfer button shows FULFILLMENT as the next station', A.run("stnNextFor(getCase('IM-TEST-2'),'PSE')") === 'FULFILLMENT');
+  A.run("stnMove('IM-TEST-2')"); await sleep(3000);
+  check('a troubleshooting-only case transferred from PSE goes straight to FULFILLMENT (other screen)', B.run("getCase('IM-TEST-2').station") === 'FULFILLMENT' && B.run("getCase('IM-TEST-2').stH.map(h=>h.s).join('>')") === 'WFM>CARE>PSE');
+  check('the history says which stations were skipped', B.run("getCase('IM-TEST-2').log.some(l=>l.action==='Station transfer'&&/PSE → FULFILLMENT \\(troubleshooting only · skipped ARCH, PET, SUPPLY CHAIN\\)/.test(l.details))") === true);
+  A.run("stnTso('IM-TEST-2',false)"); await sleep(1500);
+  check('unticking puts the case back on the normal order', A.run("getCase('IM-TEST-2').tso") === false && A.run("stnNextFor(getCase('IM-TEST-2'),'PSE')") === 'ARCH');
   console.log('RESULT: ' + (ok ? 'PASS' : 'FAIL'));
   py.kill(); process.exit(ok ? 0 : 1);
 })();
