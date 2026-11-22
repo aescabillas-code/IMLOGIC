@@ -8,20 +8,34 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: keep-awake
+  cancel-in-progress: false
+
 jobs:
   wake:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install a headless browser
+      - name: Install Playwright (uses the Google Chrome already on the runner)
+        run: pip install --upgrade playwright
+      - name: Playwright's own Chromium (only used if Chrome is missing)
+        continue-on-error: true
         run: |
-          pip install playwright==1.48.0
-          python -m playwright install --with-deps chromium
+          if ! command -v google-chrome >/dev/null 2>&1; then python -m playwright install --with-deps chromium; fi
       - name: Open the app (and click "get this app back up" if it is asleep)
         env:
           APP_URL: ${{ secrets.APP_URL }}
         run: python tools/keep_awake.py
+      - name: Keep the screenshot and page text of a failed run
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: keep-awake-debug
+          path: keep_awake_debug/
+          if-no-files-found: ignore
+          retention-days: 7
