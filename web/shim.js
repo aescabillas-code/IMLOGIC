@@ -165,7 +165,13 @@
     });
     flush();
   }
-  setInterval(beat, POLL);
+  /* Real time (Nov 21): while the page is visible and used (a key, a click, a scroll in the last 2 minutes) it asks the
+     server for news every 0.4 s; idle or in a background tab once a second, as before. Saves never wait for this:
+     they are sent at once (kick). */
+  var LASTUSE = Date.now();
+  try { ['pointerdown', 'keydown', 'wheel', 'touchstart', 'input'].forEach(function (ev) { addEventListener(ev, function () { LASTUSE = Date.now(); }, { passive: true, capture: true }); }); } catch (e) {}
+  function pollMs() { try { if (document.hidden) return POLL; } catch (e) {} return Date.now() - LASTUSE < 120000 ? 400 : POLL; }
+  (function loop() { try { beat(); } catch (e) {} setTimeout(loop, pollMs()); })();
   setInterval(function () { if (SYNC && !DOWN) try { replayOutbox(true); } catch (e) {} }, 60000);   // history/attendance left over from a long outage
   /* coming back to the tab (browsers slow timers down in background tabs): ask for the latest at once */
   function wake() { if (!SYNC) return; AWAIT = 0; flush(); }
@@ -233,6 +239,9 @@
   /* IM•LOGIC: read-only search of the PET Station database (server side, see pet_lookup in streamlit_app.py) */
   window.__petLookup = function (q) { return rpc('pet_lookup', { q: q }, 30000); };
   window.__petGet = function (id) { return rpc('pet_get', { id: id }, 30000); };
+  /* linked PET cases changed since a time (keeps linked cases up to date with PET), and the IM•LOGIC ⇄ PET message thread */
+  window.__petSync = function (ids, since) { return rpc('pet_sync', { ids: ids, since: since || 0 }, 30000); };
+  window.__bridge = function (op, args) { return rpc(op, args || {}, 20000); };
 
   /* ---------- live updates ---------- */
   var W = [];
@@ -250,6 +259,7 @@
   function onVers() { W.slice().forEach(function (w) { if ((VERS[w.coll] || 0) !== w.v) refresh(w); }); }
   function sub(w) { W.push(w); refresh(w, true); return function () { var i = W.indexOf(w); if (i >= 0) W.splice(i, 1); }; }
   function bump(c) { W.forEach(function (w) { if (w.coll === c) refresh(w); }); }
+  window.__petResync = function () { cacheSig = ''; W.slice().forEach(function (w) { w.sig = null; refresh(w, true); }); kick(); return true; };
 
   function docSnap(r, id) {
     var data = r && r.exists ? clone(r.data) : undefined;
