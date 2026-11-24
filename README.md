@@ -56,7 +56,25 @@ Streamlit Community Cloud: same values in App settings → Secrets (see `.stream
   mode, tile glow, plus live numbers per station (open, breached, finished stays, SLA met %, average
   time in station). Stored in `config/stations`.
 * **Reports:** report builder columns *Current Station*, *Time in Current Station*, *Station SLA (min)*,
-  *Station SLA Status* and *Station History*.
+  *Station SLA Status* and *Station History*, plus a *Duration* column per station (e.g. *PSE Duration*) and
+  *Total Station Time* and *At Risk to Miss*.
+* **SLA report** (Settings › Reports › ⏱ SLA report): uses the same period / account / case type / status filters as the
+  other reports. On screen: a station summary (SLA, cases, finished visits, met, missed, met %, average and longest time,
+  in station now, breached now) and the per-station duration of every case (time in each station; Customer Hold time is
+  not counted; repeat visits to a station are added up; stations skipped by a troubleshooting-only case show as skipped).
+  **⬇ Download SLA Excel Report** saves `IM_SLA_Report_<from>_to_<to>.xlsx` with three sheets: *SLA Summary*,
+  *Per-Station Duration* (a duration and SLA result column for every station, total station time, stations missed) and
+  *Station Visits* (every visit: entered, left, duration, Customer Hold pause, SLA, result, moved by). Durations are Excel
+  times (`[h]:mm:ss`) so they can be summed and averaged.
+  * **At risk to miss:** a case still in its station that is past the warning threshold (Stations & SLA › warning %) but
+    not yet past the SLA. Shown as a column in the station summary (count per station) and per case (station, % of SLA
+    used, time left), and in the Excel sheets and the report builder (*At Risk to Miss*).
+  * **Excel formatting and charts:** the first sheet, *Visual Summary*, has KPI tiles (cases, finished visits, met %,
+    missed, at risk to miss, breached now) and five charts: overall met vs missed, met vs missed by station, met % by
+    station, average time vs SLA, and open cases per station (within SLA / at risk / breached). The charts are drawn in
+    the browser and saved into the workbook as pictures. The other sheets have coloured tabs, frozen headers, filters,
+    an all-stations total row, colour-coded results (green met, orange at risk, red missed/breached, grey skipped) and
+    landscape print setup with page numbers.
 * **Troubleshooting only** (tick box in the Station & SLA card, case field `tso`): when such a case is transferred from
   PSE it goes straight to FULFILLMENT, skipping ARCH, PET and SUPPLY CHAIN. The tick, and the stations skipped on the
   transfer, are written to the case history. Unticked, the case follows the normal order.
@@ -152,6 +170,43 @@ The PET team photos are gone. The login page shows a neutral IM•LOGIC picture 
 position, so claiming a seat, passwords, sign-up and email sign-in work exactly as before. The IM Manager, June John
 Cruz, Arianne Escabillas and the Director keep their fixed seats; every other seat is open. Replace the picture with your
 team's photo in **Settings → 🎨 Theme → Login page (DIY)** (picture + face boxes) and manage people in **Settings → 👤 Profiles**.
+
+## Nov 24: SLA profile per case, hand-over Queue, log-in time
+
+**SLA profiles.** Every case has an SLA profile (case field `slaP`): *Standard* (the station SLAs used until now),
+*4hr Call to Repair*, *6hr Call to Repair* and *Next Business Day*. Each profile has its own minutes per station, edited in
+Settings › Stations & SLA (stored with the station settings in `config/stations` as `pm` and `defP`). Suggested minutes:
+
+| Station | Standard | 4hr CTR | 6hr CTR | NBD |
+|---|---|---|---|---|
+| WFM | 15 | 10 | 15 | 30 |
+| CARE | 15 | 15 | 20 | 60 |
+| PSE | 30 | 30 | 45 | 120 |
+| ARCH | 30 | 20 | 30 | 60 |
+| PET | 45 | 45 | 60 | 180 |
+| SUPPLY CHAIN | 30 | 30 | 45 | 240 |
+| FULFILLMENT | 120 | 90 | 145 | 750 |
+| **Total** | 4 hr 45 min | 4 hr | 6 hr | 24 hr |
+
+* The profile is picked in the add-case form (default: *SLA profile for new cases* in Settings) and can be changed in the
+  case's Station & SLA card (written to the case history). The station clock, the 60 / 80 / 100 % alerts, Met / Missed,
+  the station tiles' list rows and the SLA report all use the case's own minutes. A finished stay keeps the SLA it had.
+* The cases list shows a small tag (4H CTR, 6H CTR, NBD) next to the station; Standard shows none.
+* SLA report: an *SLA profile* filter, an *SLA Profile* column (screen and Excel), and the report builder field
+  *SLA Profile*. The summary's SLA column shows the profile minutes, or "varies" when the cases have different profiles.
+* NBD runs on the clock like the others (minutes per station). Counting business hours only is not part of this change.
+
+**Hand-over Queue.** At an agent's EOS, if no agent is online (on shift, Available, not within 30 min of their own EOS,
+logged in), their open cases (Customer Hold cases included) now go to the **Queue** (`owner: "Queue"`, `qho` = who left)
+instead of staying with the agent who left. The screen that runs the hand-over assigns them as soon as an agent is
+online, split equally like any EOS hand-over (they count as hand-over cases). New cases that arrive with nobody online
+already waited in the Queue (round robin). The Queue is shown under the station tiles (case, station, reason, waiting
+time). A case whose owner is no longer on the shift schedule (renamed or removed) is handed over the same way. Before, it
+was never moved.
+
+**Log-in time (attendance).** The log-in of a shift is the time the agent signed in, in server time. It is written once
+the saved attendance has loaded, and a later sign-in (page reload, second device) never replaces it. The server also keeps
+the earliest log-in of a shift (`att` documents) and never lets an "absent" mark erase a log-in.
 
 ## Nov 22
 * **Linked PET cases follow PET on their own.** Every few seconds IM•LOGIC asks which linked PET cases were saved in PET

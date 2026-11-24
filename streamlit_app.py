@@ -917,6 +917,28 @@ def _body(data: Any) -> Dict[str, Any]:
     return out
 
 
+def _num(v: Any) -> float:
+    return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else 0.0
+
+
+def att_keep_first(old: Any, new: Any) -> Any:
+    """Attendance (Nov 24): one document per agent and shift; `in` is the log-in time. A later write (sign-in again after a
+    reload, a second device, the end-of-shift "absent" mark from a screen that had not seen the log-in yet) never replaces
+    an earlier log-in: the earliest log-in of the shift is kept, with its lateness."""
+    if not isinstance(old, dict) or not isinstance(new, dict):
+        return new
+    oi, ni = _num(old.get("in")), _num(new.get("in"))
+    if oi > 0 and (ni <= 0 or ni > oi):
+        new = dict(new)
+        new["in"] = old.get("in")
+        if "late" in old:
+            new["late"] = old.get("late")
+        new.pop("absent", None)
+        if old.get("by"):
+            new["by"] = old.get("by")
+    return new
+
+
 def execute(store: MemStore, op: str, a: Dict[str, Any]) -> Any:
     """Run one request from the browser. Same semantics as the original REST API."""
     a = a or {}
@@ -943,7 +965,10 @@ def execute(store: MemStore, op: str, a: Dict[str, Any]) -> Any:
         return {"version": v, "count": len(items), "items": items}
     if op == "put":
         c, i = _coll(a.get("c")), _id(a.get("id"))
-        store.put(c, i, _body(a.get("data")))
+        body = _body(a.get("data"))
+        if c == "att":
+            body = att_keep_first(store.get(c, i), body)
+        store.put(c, i, body)
         return {"id": i, "version": store.version(c)}
     if op == "patch":
         c, i = _coll(a.get("c")), _id(a.get("id"))
