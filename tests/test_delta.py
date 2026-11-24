@@ -83,7 +83,7 @@ class FastOpening(unittest.TestCase):
         page = (d / "index.html").read_text(encoding="utf-8")
         self.assertTrue((d / "landing-img.webp").exists() and (d / "landing-img-m.webp").exists())
         self.assertNotIn('id="landing-img" alt="PAT, Partner Engagement Team" draggable="false" src="data:', page)
-        self.assertLess(len(page), 800_000)
+        self.assertLess(len(page), 850_000)   # Nov 24: SLA profiles, queue and SLA report added ~15 KB
         self.assertNotIn("cdn.tailwindcss.com", page)          # styles are pre-built, nothing compiles in the browser
         self.assertIn('<style id="tw-static">', page)
         self.assertNotIn('xlsx.full.min.js"></script>', page)  # Excel tools load only when needed
