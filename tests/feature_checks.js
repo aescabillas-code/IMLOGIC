@@ -484,7 +484,7 @@ let A; const setv = (id, v) => { A.ctx.document.getElementById(id).value = v; };
   A.run("closeCase()");
 
   // ---------- case modal layout, closing rule, availability toggle, simulation ----------
-  A.run("ME={role:'manager',name:'Jeff Bote'};CASES.length=0;(()=>{const c=mkCase('MODAL-1','Haina Azuela',{hp:true});c.items.forEach(i=>{i.done=true});c.sev='Sev 3';c.cstatus=CSTAT[0];c.model='AP-1';c.sfdc=['5001'];c.ritm='RITM1';c.pOrd=1;c.pDel=2;c.ceArr=3;c.mw={s:Date.now()-36e5,e:null,by:'x',ts:Date.now()};CASES.push(c)})()");
+  A.run("ME={role:'manager',name:'Jeff Bote'};CASES.length=0;(()=>{const c=mkCase('MODAL-1','Haina Azuela',{hp:true});c.items.forEach(i=>{i.done=true});c.sev='Sev 3';c.cstatus=CSTAT[0];c.model='AP-1';c.sfdc=['5001'];c.ritm='RITM1';c.pOrd=1;c.pDel=2;c.ceArr=3;c.mw={s:Date.now()-36e5,e:null,by:'x',ts:Date.now()};c.station='FULFILLMENT';CASES.push(c)})()");   /* Nov 26: a normal case is closed at FULFILLMENT */
   A.run("openCaseModal('MODAL-1')");
   const mb = String(A.els['case-body'].innerHTML);
   check('case modal uses the new sections', ['High priority account', 'Case ID', 'Owner', 'Case Information', 'Transfer Details', 'Case Details', 'Work / Part Orders', 'Revisit', 'Checklists', 'Case History', 'Close Case'].every(x => mb.includes(x)));
@@ -1604,7 +1604,7 @@ let A; const setv = (id, v) => { A.ctx.document.getElementById(id).value = v; };
     A.run("pers('Ms Amy').msch=Object.assign({},pers('Ms Amy').msch,{'2026-10-05':'14:00-23:00','2026-10-06':'14:00-23:00','2026-11-05':'06:00-15:00','2026-11-06':'06:00-15:00'})");
     check('the region of an earlier month comes from that month\'s schedule (EMEA in December/October, APJ in November)', A.run("regionAt('Ms Amy',new Date('2026-10-10T12:00:00').getTime())") === 'EMEA' && A.run("regionFor('Ms Amy',new Date('2026-11-01T00:00:00').getTime(),new Date('2026-11-30T23:00:00').getTime())") === 'APJ');
     // attendance: not logged in by the start = Absent (no cases); logging in clears it (late)
-    A.run('STAFF=' + JSON.stringify([ag('At Amy', -120, 300), ag('At Ben', -120, 300), ag('At Cy', -540, -30)]) + ";STAFF.forEach(p=>p.sch=mkSch(p));ensureMgrs(STAFF);window.__db=DBON;window.__ga=GOT.att;DBON=true;GOT.att=1;ATT_SINCE=Date.now()-45*864e5;ATT={};ATT[attId('At Ben',dkey(wall(Date.now())))]={in:Date.now()-150*6e4}");
+    A.run('STAFF=' + JSON.stringify([ag('At Amy', -120, 300), ag('At Ben', -120, 300), ag('At Cy', -540, -30)]) + ";STAFF.forEach(p=>p.sch=mkSch(p));ensureMgrs(STAFF);window.__db=DBON;window.__ga=GOT.att;DBON=true;GOT.att=1;GOT.tz=1;ATT_SINCE=Date.now()-45*864e5;ATT={};ATT[attId('At Ben',dkey(wall(Date.now())))]={in:Date.now()-150*6e4}");
     check('an agent on shift who has not logged in to PAT is Absent and gets no cases', A.run("isAbsentNow(pers('At Amy'),simNow())") === true && A.run("onlineAgents(simNow()).map(p=>p.name).join()") === 'At Ben' && A.run("coverFor(simNow(),null,undefined,true)") === 'At Ben');
     A.run("render()");
     check('Agent Status shows Absent', String(A.els['agent-list'].innerHTML).includes('>Absent</span>'));

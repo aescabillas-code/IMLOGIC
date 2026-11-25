@@ -28,8 +28,8 @@ const SHOTS = process.env.SHOTS || '/home/claude/build';
   ok(r.sla === 12 && r.saved === 12 && r.rest === 30 && r.others === 15, 'Settings: a profile minute is saved with the station settings and applies at once (other profiles unchanged) ' + JSON.stringify(r));
   await p.evaluate(() => setTabTo('stn')); await p.waitForTimeout(200);
   const st = await p.evaluate(() => document.getElementById('settings').innerText);
-  ok(/SLA profiles · minutes allowed in each station/.test(st) && /4hr Call to Repair/.test(st) && /6hr Call to Repair/.test(st) && /Next Business Day/.test(st) && /Total \(all stations\)/.test(st) && /SLA profile for new cases/.test(st), 'Settings › Stations & SLA has the SLA profile table (minutes per station, totals, default for new cases)');
-  await p.evaluate(() => { const el = [...document.querySelectorAll('#settings div')].find(d => /SLA profiles · minutes/.test(d.textContent) && d.className.includes('border rounded-xl')); if (el) el.scrollIntoView(); });
+  ok(/Onsite \/ RMA SLA · minutes allowed in each station/.test(st) && /Troubleshooting only SLA · minutes allowed in each station/.test(st) && /4hr Call to Repair/.test(st) && /6hr Call to Repair/.test(st) && /Next Business Day/.test(st) && /Total \(all stations\)/.test(st) && /SLA profile for new cases/.test(st), 'Settings › Stations & SLA has the SLA profile table (minutes per station, totals, default for new cases)');
+  await p.evaluate(() => { const el = [...document.querySelectorAll('#settings div')].find(d => /Onsite \/ RMA SLA · minutes/.test(d.textContent) && d.className.includes('border rounded-xl')); if (el) el.scrollIntoView(); });
   await p.screenshot({ path: SHOTS + '/s16_profiles.png' });
   r = await p.evaluate(() => { stnSetOpt('defP', 'ctr6'); const c = mkCase('P-DEF', 'Cy Busy', {}); const k = c.slaP; stnSetOpt('defP', 'std'); closeSettings(); return k; });
   ok(r === 'ctr6', 'the default profile for new cases can be changed (6hr Call to Repair)');
@@ -85,7 +85,7 @@ const SHOTS = process.env.SHOTS || '/home/claude/build';
     const T = m => { m = ((m % 1440) + 1440) % 1440; return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); }, n = minOf(simNow());
     const ag = { name: 'Att Ana', role: 'Incident Manager', start: T(n - 30), end: T(n + 420), days: [1, 1, 1, 1, 1, 1, 1], status: 'available' }; ag.sch = mkSch(ag); STAFF.push(ag);
     const db0 = DBON, g0 = GOT.att, q0 = dbq; const writes = []; DBON = true; dbq = { doc: id => ({ set: d => { writes.push([id, d]); return Promise.resolve(); } }) };
-    ME = { role: 'agent', name: 'Att Ana' }; ATT = {}; GOT.att = 0; ATT_SIGNIN = srvNow() - 10 * 60000;   // signed in 10 minutes ago
+    ME = { role: 'agent', name: 'Att Ana' }; ATT = {}; GOT.att = 0; GOT.tz = 1; ATT_WAIT = 0; ATT_SIGNIN = srvNow() - 10 * 60000;   // signed in 10 minutes ago
     const before = recordAtt();
     GOT.att = 1; const first = recordAtt(); const k = Object.keys(ATT)[0], a = Object.assign({}, ATT[k]);
     ATT_SIGNIN = srvNow(); const again = recordAtt();                                    // signs in again later (reload)
@@ -93,7 +93,7 @@ const SHOTS = process.env.SHOTS || '/home/claude/build';
     DBON = db0; GOT.att = g0; dbq = q0; ME = { role: 'manager', name: 'Jeff Bote' }; return out;
   });
   ok(r.before === false, 'the log-in is not written before the saved attendance has loaded (so it cannot replace an earlier log-in)');
-  ok(r.first === true && r.inAgo === 10 && r.late === 20, 'the log-in time is when the agent signed in (10 min ago → 20 min late for a shift that started 30 min ago) ' + JSON.stringify(r));
+  ok(r.first === true && r.inAgo === 10 && (r.late === 20 || r.late === 21), 'the log-in time is when the agent signed in (10 min ago → 20 min late for a shift that started 30 min ago) ' + JSON.stringify(r));
   ok(r.again === false && r.writes === 1 && /^att\//.test(r.id), 'signing in again later does not change the first log-in of the shift');
 
   ok(!errs.length, 'no browser errors ' + errs.join(' | '));

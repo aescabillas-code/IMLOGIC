@@ -1,0 +1,71 @@
+// Nov 26: Troubleshooting only — close at PSE, maintenance window / parts / CE arrival not needed (greyed out);
+// separate Troubleshooting only and Onsite / RMA SLA minutes; developer "return to a station" to fix a wrong transfer.
+const { chromium } = require('playwright'), path = require('path');
+let fails = 0; const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails++; };
+const SHOTS = process.env.SHOTS || '/home/claude/build';
+(async () => {
+  const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 1300, height: 950 } });
+  const errs = []; p.on('pageerror', e => errs.push(String(e)));
+  await p.route(/^https?:/, r => r.abort());
+  await p.goto('file://' + path.join(__dirname, '..', 'web', 'im_logic.html')); await p.waitForTimeout(2500);
+  await p.evaluate(() => {
+    STAFF = [{ name: 'Cy Busy', role: 'Incident Manager', start: '00:00', end: '23:59', days: [1, 1, 1, 1, 1, 1, 1], status: 'available' }, { name: 'Jeff Bote', role: 'IM Manager', start: '00:00', end: '23:59', days: [1, 1, 1, 1, 1, 1, 1] }];
+    STAFF.forEach(x => x.sch = mkSch(x)); ensureMgrs(STAFF); STAFFLOADED = true;
+    ME = { role: 'manager', name: 'Jeff Bote' }; applyMe(); SIM_USER = 'Jeff Bote'; document.getElementById('landing').style.display = 'none'; CASES.length = 0;
+    window.__sla = []; openSla = cid => window.__sla.push(cid);
+    const mk = (id, st, tso) => { const c = mkCase(id, 'Cy Busy', { sev: 'Sev 2', account: 'Acme' }); Object.assign(c, { station: st, stAt: stnNow() - 5 * 60000, tso: !!tso, store: '12', cstatus: 'Ongoing', model: 'X1', sfdc: ['500A'], ritm: 'RITM1', arubaNo: 'A1', recv: Date.now() - 36e5 }); c.items.forEach(i => i.done = true); CASES.push(c); return c; };
+    mk('T-PSE', 'PSE', 1); mk('N-PSE', 'PSE', 0); mk('N-FUL', 'FULFILLMENT', 0); mk('T-CARE', 'CARE', 1); const cx = mk('C-WFM', 'WFM', 0); cx.cstatus = 'Canceled';
+  });
+  // ---------- closing ----------
+  let r = await p.evaluate(() => ({ t: [stnCloseWhy(getCase('T-PSE')), missingFields(getCase('T-PSE'))], n: [stnCloseWhy(getCase('N-PSE')), missingFields(getCase('N-PSE'))], f: [stnCloseWhy(getCase('N-FUL')), missingFields(getCase('N-FUL'))], tc: stnCloseWhy(getCase('T-CARE')), cw: stnCloseWhy(getCase('C-WFM')) }));
+  ok(r.t[0] === '' && r.t[1].length === 0, 'troubleshooting only at PSE: can be closed, nothing else required ' + JSON.stringify(r.t));
+  ok(/FULFILLMENT first/.test(r.n[0]), 'not ticked, at PSE: cannot be closed yet (normal order, close at FULFILLMENT)');
+  ok(r.f[0] === '' && r.f[1].includes('Maintenance Window') && r.f[1].includes('Part Ordered Time') && r.f[1].includes('CE Arrival Time'), 'not ticked, at FULFILLMENT: closing needs the maintenance window, parts and CE arrival as before ' + JSON.stringify(r.f[1]));
+  ok(/transfer the case to PSE first/.test(r.tc), 'troubleshooting only but still in CARE: transfer to PSE first');
+  ok(r.cw === '', 'a Canceled case can still be closed in any station');
+  r = await p.evaluate(() => { window.__sla = []; closeCaseAct('N-PSE'); const a = window.__sla.length; closeCaseAct('T-PSE'); return [a, window.__sla.join()]; });
+  ok(r[0] === 0 && r[1] === 'T-PSE', 'Close Case goes ahead for the troubleshooting case at PSE and is stopped for the normal case at PSE');
+  await p.evaluate(() => openCaseModal('T-PSE')); await p.waitForTimeout(300);
+  r = await p.evaluate(() => { const B = document.getElementById('case-body'), d = id => { const e = document.getElementById(id + '-btn'); return e ? e.disabled : null; }, mw = [...B.querySelectorAll('div')].find(x => /^Maintenance window/.test(x.textContent.trim()) && x.className.includes('border-t')); const txt = B.innerText; return { pOrd: d('cd-pOrd'), pDel: d('cd-pDel'), ce: d('cd-ceArr'), mw: mw ? mw.style.pointerEvents : 'none?', mwop: mw ? mw.className.includes('opacity-60') : false, lbl: (txt.match(/not needed \(troubleshooting only\)/g) || []).length, close: /Close Case/.test(txt) && !/transfer to/.test(txt.split('Close')[txt.split('Close').length - 1]), note: /the case ends here\. Close it at PSE/.test(txt), noXfer: !/Transfer to FULFILLMENT/.test(txt), owners: ['ARCH','PET','SUPPLY CHAIN','FULFILLMENT'].every(s => document.getElementById('sto-' + STATIONS.indexOf(s)).disabled) && ['WFM','CARE','PSE'].every(s => !document.getElementById('sto-' + STATIONS.indexOf(s)).disabled) }; });
+  ok(r.pOrd === true && r.pDel === true && r.ce === true, 'troubleshooting only: part ordered, part delivered and CE arrival are greyed out ' + JSON.stringify(r));
+  ok(r.mw === 'none' && r.mwop && r.lbl >= 4, 'the maintenance window is greyed out too, each marked "not needed (troubleshooting only)"');
+  ok(r.close && r.note && r.noXfer, 'the PSE card says the case ends here, there is no Transfer to FULFILLMENT, and the Close Case button is active ' + JSON.stringify(r));
+  ok(r.owners, 'ARCH, PET, SUPPLY CHAIN and FULFILLMENT case owner fields are greyed out (WFM, CARE, PSE stay)');
+  await p.evaluate(() => { const e = document.getElementById('cd-pOrd-btn'); if (e) e.scrollIntoView({ block: 'center' }); });
+  await p.screenshot({ path: SHOTS + '/s19_tso_fields.png' });
+  await p.evaluate(() => { const e = [...document.querySelectorAll('#case-body *')].find(x => /the case ends here/.test(x.textContent) && x.children.length < 4); if (e) e.scrollIntoView({ block: 'center' }); });
+  await p.screenshot({ path: SHOTS + '/s20_tso_pse.png' });
+  r = await p.evaluate(() => { stnTso('T-PSE', false); const B = document.getElementById('case-body').innerText; const d = document.getElementById('cd-pOrd-btn'); return { dis: d && d.disabled, why: stnCloseWhy(getCase('T-PSE')), btn: /Close case · transfer to FULFILLMENT first/.test(B), log: getCase('T-PSE').log[0].details }; });
+  ok(r.dis === false && /FULFILLMENT first/.test(r.why) && r.btn, 'unticking brings back the normal process: fields required again, Close is disabled until FULFILLMENT');
+  ok(/Unticked · the case follows the normal station order and is closed at FULFILLMENT/.test(r.log), 'ticking / unticking is written to the history');
+  await p.evaluate(() => { stnTso('T-PSE', true); closeCase(); });
+  // ---------- separate SLA for troubleshooting and onsite / RMA ----------
+  r = await p.evaluate(() => { const c = getCase('T-PSE'); slaPCase('T-PSE', 'ctr4'); const t = [stnSla('PSE', c), stnSla('FULFILLMENT', c), stnSla('ARCH', c), slaPTot('ctr4', true)]; stnTso('T-PSE', false); const o = [stnSla('PSE', c), stnSla('FULFILLMENT', c)]; const log = c.log[0].details; stnTso('T-PSE', true); return { t, o, log }; });
+  ok(JSON.stringify(r.t) === '[180,90,20,240]' && JSON.stringify(r.o) === '[30,90]', 'a 4hr CTR case uses the troubleshooting minutes when ticked (PSE 180, to PSE 4 hr; no FULFILLMENT in that table) and the onsite / RMA minutes when not (PSE 30, FULFILLMENT 90) ' + JSON.stringify(r));
+  ok(/PSE SLA 180 → 30 min \(Onsite \/ RMA SLA\)/.test(r.log), 'switching changes the current station SLA and says so in the history: ' + r.log);
+  r = await p.evaluate(() => { openSettings(); setTabTo('stn'); slaTSet('ctr4', 'PSE', 200); slaTSet('std', 'PSE', 25); const c = getCase('T-PSE'), n = getCase('N-PSE'); let sv = null; try { sv = JSON.parse(localStorage.getItem('iml_stn')); } catch (e) {} const txt = document.getElementById('settings').innerText; return { t: stnSla('PSE', c), n: stnSla('PSE', n), std: stnSlaStd('PSE'), sv: sv && sv.pt && [sv.pt.ctr4.PSE, sv.pt.std.PSE], tbl: /Troubleshooting only SLA/.test(txt) && /Total to PSE/.test(txt) && !/only if transferred from PSE/.test(txt) && /are closed at PSE, so ARCH, PET, SUPPLY CHAIN and FULFILLMENT have no SLA here/.test(txt) && /Onsite \/ RMA SLA/.test(txt) }; });
+  ok(r.t === 200 && r.n === 25 - 25 + r.std && r.sv && r.sv[0] === 200 && r.sv[1] === 25 && r.tbl, 'Settings has both tables; troubleshooting minutes are saved apart and do not change onsite / RMA ' + JSON.stringify(r));
+  ok(await p.evaluate(() => stnSla('PSE', getCase('N-PSE')) === stnSlaStd('PSE')), 'a Standard onsite case still uses the station SLA');
+  await p.evaluate(() => { const el = [...document.querySelectorAll('#settings div')].find(d => /Troubleshooting only SLA · minutes/.test(d.textContent) && d.className.includes('border rounded-xl')); if (el) el.scrollIntoView(); });
+  await p.screenshot({ path: SHOTS + '/s21_tso_sla.png' });
+  await p.evaluate(() => closeSettings());
+  // ---------- developer: return to a station ----------
+  r = await p.evaluate(() => { openCaseModal('N-PSE'); return !!document.getElementById('stn-ret'); });
+  ok(r === false, 'a manager who is not a developer does not see "return to a station"');
+  await p.evaluate(() => { closeCase(); ME = { role: 'manager', name: 'Arianne Escabillas' }; applyMe(); SIM_USER = 'Arianne Escabillas'; });
+  ok(await p.evaluate(() => isDevMe()), 'Arianne Escabillas has developer access');
+  r = await p.evaluate(() => { const c = getCase('N-PSE'), a0 = stnStart(c); stnMove('N-PSE'); c.stAt = stnNow() - 3 * 60000; openCaseModal('N-PSE'); const sel = document.getElementById('stn-ret'), u = document.getElementById('stn-ret-undo-l'); const o = { cur: stnOf(c), def: sel && sel.value, undoShown: u && !u.classList.contains('hidden') }; document.getElementById('stn-ret-why').value = ''; stnReturn('N-PSE'); o.noWhy = stnOf(c); document.getElementById('stn-ret-why').value = 'Moved to ARCH by mistake'; stnReturn('N-PSE'); o.after = stnOf(c); o.keepStart = stnStart(c) === a0; o.hist = stnHist(c).map(h => h.s).join(); o.log = c.log[0].action + ' · ' + c.log[0].details; return o; });
+  ok(r.cur === 'ARCH' && r.def === 'PSE' && r.undoShown, 'the developer box offers the station the case came from, with "undo the transfer" ' + JSON.stringify(r));
+  ok(r.noWhy === 'ARCH', 'a reason is required');
+  ok(r.after === 'PSE' && r.keepStart && !/PSE/.test(r.hist), 'undo: back in PSE, the PSE clock continues from when it entered, the wrong ARCH stay is removed ' + JSON.stringify(r.hist));
+  ok(/^Station returned · Developer returned the case ARCH → PSE · undo of the transfer PSE → ARCH/.test(r.log) && /Reason: Moved to ARCH by mistake/.test(r.log), 'written to the case history: ' + r.log.slice(0, 120));
+  await p.evaluate(() => { const e = document.getElementById('stn-ret'); if (e) e.scrollIntoView({ block: 'center' }); });
+  await p.screenshot({ path: SHOTS + '/s22_dev_return.png' });
+  r = await p.evaluate(() => { const c = getCase('N-PSE'); const s = document.getElementById('stn-ret'); s.value = 'WFM'; stnRetSync('N-PSE'); const hid = document.getElementById('stn-ret-undo-l').classList.contains('hidden'); document.getElementById('stn-ret-why').value = 'Should restart at WFM'; stnReturn('N-PSE'); const h = stnHist(c), last = h[h.length - 1], R = slaCase(c), S = slaSum([c]); return { hid, cur: stnOf(c), last: [last.s, last.fix, last.met], res: R.per.PSE.res, sum: [S.PSE.n, S.PSE.met, S.PSE.miss], perf: stnPerf().PSE.n }; });
+  ok(r.hid && r.cur === 'WFM' && r.last[0] === 'PSE' && r.last[1] === 1 && r.last[2] === null, 'returning to another station keeps the wrong stay as "corrected" and starts the clock there ' + JSON.stringify(r));
+  ok(r.res === 'Corrected' && r.sum.join() === '0,0,0' && r.perf === 0, 'a corrected stay is not counted as met or missed (case, SLA report, station stats)');
+  ok(await p.evaluate(() => /↩ Corrected/.test(document.getElementById('case-body').innerHTML)), 'the station history in the case shows it as Corrected');
+  ok(!errs.length, 'no browser errors ' + errs.join(' | '));
+  await b.close();
+  console.log(fails ? 'RESULT: FAIL (' + fails + ')' : 'RESULT: PASS'); process.exit(fails ? 1 : 0);
+})();
