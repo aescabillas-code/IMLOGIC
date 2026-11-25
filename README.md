@@ -171,6 +171,54 @@ position, so claiming a seat, passwords, sign-up and email sign-in work exactly 
 Cruz, Arianne Escabillas and the Director keep their fixed seats; every other seat is open. Replace the picture with your
 team's photo in **Settings → 🎨 Theme → Login page (DIY)** (picture + face boxes) and manage people in **Settings → 👤 Profiles**.
 
+## Nov 26 (b): attendance, agents signed in but shown Absent
+
+The causes found, all fixed:
+* **HPE e-mail sign-in with the name written differently** from the schedule ("Sabile, Karen", "Ma. Karen Sabile"): it
+  signed in as a "member", so no log-in was ever recorded. Names now match in any order and with extra names, the HPE
+  e-mail address (karen.sabile@hpe.com) is used too, and a member sign-in is re-checked while signed in.
+* **Signed-in name no longer on the schedule** (schedule re-uploaded with another spelling): matched again.
+* **Waiting for data**: the log-in waits at most 15 s for the saved attendance and the team timezone, then is written. The
+  server keeps the first log-in of a shift, so this can never replace an earlier one.
+* **A log-in write that did not reach the server**: sent again every 30 s until the server copy is seen.
+* **Proof of sign-in**: every sign-in also writes the sign-in time (`avail`). A sign-in during the shift's log-in window
+  now counts as logged in on every screen (not Absent, gets cases). The screen that runs the hand-over writes the missing
+  log-in from it, and a shift is marked Absent at EOS only if there was no sign-in at all.
+
+## Nov 26: Troubleshooting only closes at PSE, separate SLA tables, developer return
+
+**Closing.** *Troubleshooting only* ticked: the case ends at PSE and is closed there. There is no transfer from PSE (no
+ARCH, PET, SUPPLY CHAIN or FULFILLMENT), and those four case-owner fields are greyed out ("Not needed (troubleshooting
+only)"). The maintenance window, Part ordered, Part delivered and CE arrival are greyed out and marked
+"not needed (troubleshooting only)", and are not required to close. Not ticked: the normal process. The case goes through
+the stations and is closed at FULFILLMENT; until then the button reads "Close case · transfer to FULFILLMENT first".
+These fields stay required as before. Canceled cases can be closed in any station.
+
+**SLA tables.** Settings › Stations & SLA has two tables, each with a column per SLA profile (Standard, 4hr / 6hr Call to
+Repair, Next Business Day):
+* **Onsite / RMA SLA**: every station (as on Nov 24; Standard = the station SLA).
+* **Troubleshooting only SLA**: WFM, CARE and PSE, with a *Total to PSE*. Stored as `config/stations` `pt`. Suggested
+  minutes:
+
+| Station | Standard | 4hr CTR | 6hr CTR | NBD |
+|---|---|---|---|---|
+| WFM | 15 | 20 | 30 | 60 |
+| CARE | 15 | 40 | 60 | 120 |
+| PSE | 30 | 180 | 270 | 1260 |
+| **Total to PSE** | 1 hr | 4 hr | 6 hr | 24 hr |
+
+A case uses the table that matches its tick box. Ticking or unticking switches the SLA of the station it is in now, and
+the history says so (for example "PSE SLA 180 → 30 min (Onsite / RMA SLA)"). Finished stays keep their SLA.
+
+**Developer: return to a station.** For developers only (e.g. Arianne Escabillas), the Station & SLA card has
+*🛠 Developer · return to a station* (station, reason required, Return case):
+* back to the station the case came from, with *Undo the transfer* (default): that stay continues, with its clock running
+  from when it first entered. The wrong stay is removed.
+* any other station (or undo unticked): the wrong stay stays in the history as **↩ Corrected**. Its time shows, but it is
+  not counted as met or missed (case, SLA report, station stats). The clock starts in the chosen station.
+
+Every return is written to the case history as *Station returned*, with the reason.
+
 ## Nov 24: SLA profile per case, hand-over Queue, log-in time
 
 **SLA profiles.** Every case has an SLA profile (case field `slaP`): *Standard* (the station SLAs used until now),
