@@ -171,6 +171,22 @@ position, so claiming a seat, passwords, sign-up and email sign-in work exactly 
 Cruz, Arianne Escabillas and the Director keep their fixed seats; every other seat is open. Replace the picture with your
 team's photo in **Settings → 🎨 Theme → Login page (DIY)** (picture + face boxes) and manage people in **Settings → 👤 Profiles**.
 
+## Nov 26 (d): Case Details optional to close, cute look, Queue count
+
+* **Closing**: the Case Details section is no longer required to close, for troubleshooting only and onsite / RMA cases
+  alike: model number, account name, store number, lift, Cabling/HOD, part ordered / delivered, CE arrival and the
+  maintenance window are marked *(optional)*. Case Information is still needed: severity, status, SFDC case ID, RITM, and
+  the Aruba / AT&T case number. The station rule stays: closed at PSE when troubleshooting only, otherwise at FULFILLMENT.
+* **Cute look** (dashboard, modals, notifications), following the theme colours of Settings › Theme:
+  * a rounded font (Nunito, now the default font; Inter and the others are still in Settings › Theme) and a dotted pastel
+    background;
+  * bubbly tiles and panels that lift and wiggle on hover, candy buttons that press down, soft inputs and pastel table rows;
+  * pop-in modals with a frosted backdrop and a dotted, wavy header. SLA alerts keep their red / amber glow;
+  * toasts as a pill with **Logi**, a little original helper (a frowning Logi for "could not / please" messages, mint for
+    saved / done), plus Logi with a greeting bubble next to Operations Overview (click for the next tip);
+  * all motion stops when the device asks for reduced motion.
+* **Queue**: the Queue card shows only how many cases are waiting (no case numbers).
+
 ## Nov 26 (c): Incident Managers & Status counts, statuses lost, first sign-in
 
 * **Counts**: the Available / Unavailable tiles now count agents the way the list shows them. *Available* = on shift,
