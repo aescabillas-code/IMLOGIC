@@ -171,6 +171,23 @@ position, so claiming a seat, passwords, sign-up and email sign-in work exactly 
 Cruz, Arianne Escabillas and the Director keep their fixed seats; every other seat is open. Replace the picture with your
 team's photo in **Settings → 🎨 Theme → Login page (DIY)** (picture + face boxes) and manage people in **Settings → 👤 Profiles**.
 
+## Nov 26 (c): Incident Managers & Status counts, statuses lost, first sign-in
+
+* **Counts**: the Available / Unavailable tiles now count agents the way the list shows them. *Available* = on shift,
+  Available and logged in. *Unavailable* = Unavailable plus Absent (on shift, not logged in), shown as "incl. N absent". The
+  IM POC (no cases) is in neither. Before, everyone not set to Unavailable was counted as Available, including agents who
+  had not logged in.
+* **Statuses lost**: every agent's status is stored in the one `config/staff` document, and each screen saves the whole
+  document. When two agents changed status at about the same time, the second save put back the first agent's old status
+  (seen as wrong Available / Unavailable on other screens). Each status change now carries its time (`stTs`), and the
+  server keeps the newer status of each person when the document is saved (`staff_keep_status`). Schedule edits are not
+  affected.
+* **First sign-in**: `avail/<person>` kept only the last sign-in, so the first log-in of a shift was lost when an agent
+  signed in again. The server now keeps every sign-in (`ins`, about 40 days). The log-in of a shift is the earliest
+  sign-in in its log-in window: the screen that runs the hand-over writes it (and corrects a later one), even when the
+  agent's own log-in write never arrived. The Incident Managers list shows *Logged in hh:mm* under each available agent.
+  Sign-in times use server time.
+
 ## Nov 26 (b): attendance, agents signed in but shown Absent
 
 The causes found, all fixed:

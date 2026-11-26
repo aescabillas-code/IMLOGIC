@@ -939,6 +939,73 @@ def att_keep_first(old: Any, new: Any) -> Any:
     return new
 
 
+SIGNIN_KEEP = 80                      # sign-in times kept per person (about a month of shifts with a few sign-ins each)
+SIGNIN_DAYS = 40
+
+
+def avail_keep_signins(old: Any, new: Any) -> Any:
+    """Sign-ins (Nov 26): `avail/<person>` is written at every sign-in with `inAt` (that sign-in). It used to keep only the
+    last one, so the first log-in of a shift was lost when an agent signed in again. The server now keeps every sign-in
+    time in `ins` (newest last), so any screen can see the first sign-in of a shift."""
+    if not isinstance(new, dict):
+        return new
+    ins = set()
+    for src in (old if isinstance(old, dict) else {}, new):
+        for t in (src.get("ins") or []) if isinstance(src.get("ins"), list) else []:
+            if _num(t) > 0:
+                ins.add(int(_num(t)))
+        if _num(src.get("inAt")) > 0:
+            ins.add(int(_num(src.get("inAt"))))
+    if not ins:
+        return new
+    keep = sorted(ins)
+    cut = keep[-1] - SIGNIN_DAYS * 864e5
+    new = dict(new)
+    new["ins"] = [t for t in keep if t >= cut][-SIGNIN_KEEP:]
+    if _num(new.get("inAt")) < _num(old.get("inAt") if isinstance(old, dict) else 0):
+        new["inAt"] = old.get("inAt")              # inAt stays the latest sign-in
+    return new
+
+
+STATUS_FIELDS = ("status", "reason", "reasonNote", "reasonAt", "availAt", "eosAux", "stTs")
+
+
+def _pkey(n: Any) -> str:
+    return "".join(str(n or "").lower().split())
+
+
+def staff_keep_status(old: Any, new: Any) -> Any:
+    """Agent status (Nov 26): every agent's Available / Unavailable status is part of the one `config/staff` document, and
+    each screen saves the whole document. Two agents changing their status at about the same time made the second save
+    put back the first agent's old status. Each status change now carries its time (`stTs`); when the document is saved,
+    a newer status already stored for a person is kept."""
+    if not isinstance(old, dict) or not isinstance(new, dict):
+        return new
+    ol, nl = old.get("list"), new.get("list")
+    if not isinstance(ol, list) or not isinstance(nl, list):
+        return new
+    stored = {_pkey(p.get("name")): p for p in ol if isinstance(p, dict) and p.get("name")}
+    out, changed = [], False
+    for p in nl:
+        o = stored.get(_pkey(p.get("name"))) if isinstance(p, dict) else None
+        if o is not None and _num(o.get("stTs")) > _num(p.get("stTs")):
+            q = dict(p)
+            for f in STATUS_FIELDS:
+                if f in o:
+                    q[f] = o[f]
+                else:
+                    q.pop(f, None)
+            out.append(q)
+            changed = True
+        else:
+            out.append(p)
+    if not changed:
+        return new
+    new = dict(new)
+    new["list"] = out
+    return new
+
+
 def execute(store: MemStore, op: str, a: Dict[str, Any]) -> Any:
     """Run one request from the browser. Same semantics as the original REST API."""
     a = a or {}
@@ -968,6 +1035,10 @@ def execute(store: MemStore, op: str, a: Dict[str, Any]) -> Any:
         body = _body(a.get("data"))
         if c == "att":
             body = att_keep_first(store.get(c, i), body)
+        elif c == "avail":
+            body = avail_keep_signins(store.get(c, i), body)
+        elif c == "config" and i == "staff":
+            body = staff_keep_status(store.get(c, i), body)
         store.put(c, i, body)
         return {"id": i, "version": store.version(c)}
     if op == "patch":
