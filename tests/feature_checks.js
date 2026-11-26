@@ -158,7 +158,7 @@ let A; const setv = (id, v) => { A.ctx.document.getElementById(id).value = v; };
   setv('mw-s', '2026-11-07T10:00'); setv('mw-e', '');
   A.run(`mwSave('${cid}')`);
   check('maintenance window accepts a start only', A.run(`getCase('${cid}').mw.e`) === null && A.run(`getCase('${cid}').mw.s`) > 0);
-  check('case cannot be closed until the end is added', J(A.run(`JSON.stringify(missingFields(getCase('${cid}')))`)).includes('Maintenance Window end time'));
+  /* Nov 26: Case Details are optional to close */ check('the maintenance window end is optional to close (Nov 26)', !J(A.run(`JSON.stringify(missingFields(getCase('${cid}')))`)).includes('Maintenance Window end time'));
   check('end-time box is offered', body().includes('id="mw-end"'));
   setv('mw-end', '2026-11-07T09:00'); A.run(`mwEnd('${cid}')`);
   check('end before start is rejected', A.run(`getCase('${cid}').mw.e`) === null);
@@ -323,7 +323,7 @@ let A; const setv = (id, v) => { A.ctx.document.getElementById(id).value = v; };
   // ---------- account in report, bulk upload, case counts ----------
   check('weekly report starts with Account Name', A.run("WEEKLY[0]")==='account');
   check('bulk parser reads a row and rejects a bad one', (()=>{A.run("ACCOUNTS=['Account A'];var __r=bkParse([['Case Type *','Case Number *','Account Name *','Received on PET Queue (yyyy-mm-dd hh:mm) *'],['Aruba','AR-77','account a','2026-11-10 09:30'],['Foo','','Zed','x']]);");return A.run("__r.rows.length")===2&&A.run("__r.rows[0].errs.length")===0&&A.run("__r.rows[0].acct")==='Account A'&&A.run("__r.rows[1].errs.length")>=3})());
-  check('closing needs the account name', A.run("missingFields({caseType:'att',attNo:'1',sfdc:[],items:[],sev:'Sev 1',cstatus:'FE Name',recv:1,model:'x',mw:{s:1,e:2},mwUp:[],pOrd:1,pDel:1,ceArr:1,account:''})").includes('Account Name'));
+  /* Nov 26: Case Details are optional to close */ check('the account name is optional to close (Nov 26)', !A.run("missingFields({caseType:'att',attNo:'1',sfdc:[],items:[],sev:'Sev 1',cstatus:'FE Name',recv:1,model:'x',mw:{s:1,e:2},mwUp:[],pOrd:1,pDel:1,ceArr:1,account:''})").includes('Account Name') && A.run("missingFields({caseType:'att',attNo:'',sfdc:[],items:[],sev:'',cstatus:'',account:''}).join()") === 'Case Severity,Case Status,AT&T Case Number');
   A.run("SIMON=true;SIM_ST0=[];CASES=[];ACCOUNTS=['Account A'];NOTICEN=0;var __sn=sendAgentNotice;sendAgentNotice=function(){NOTICEN++};var __hdr=['Case Type','Case Number','Account Name','Received on PET Queue'];var __rows=[__hdr];for(var q=0;q<6;q++)__rows.push(['Aruba','AR-90'+q,'Account A','2026-11-10 09:30']);BK=bkParse(__rows);bkCommit();sendAgentNotice=__sn;");
   check('bulk upload adds every valid case', A.run("CASES.length")===6);
   check('bulk upload creates exactly one reminder alarm', A.run("CASES.reduce((n,c)=>n+c.items.filter(i=>i.rem).length,0)")===1);
@@ -456,7 +456,7 @@ let A; const setv = (id, v) => { A.ctx.document.getElementById(id).value = v; };
   const mbU2 = String(A.els['case-body'].innerHTML);
   check('the case shows Original, earlier updates and the Current one', mbU2.includes('Original') && mbU2.includes('Update 1') && mbU2.includes('Update 2') && mbU2.includes('Current'));
   check('the report keeps the original and lists every update', (() => { const t = String(A.run("mwX(getCase('MWE-1'))")); return t.includes('Original:') && t.includes('Update 1:') && t.includes('Update 3 (current):'); })());
-  check('closing needs an end time on the current window', J(A.run("JSON.stringify(missingFields(getCase('MWE-1')))")).includes('Maintenance Window end time'));
+  /* Nov 26: Case Details are optional to close */ check('an end time on the current window is optional to close (Nov 26)', !J(A.run("JSON.stringify(missingFields(getCase('MWE-1')))")).includes('Maintenance Window end time'));
   // restore the state the next tests expect
   A.run("getCase('MWE-1').mwUp.length=0");
   A.run("mwEdit('MWE-1')"); setv('mw-es', '2026-11-07T11:00'); setv('mw-ee', '2026-11-07T10:00'); A.run("mwEditSave('MWE-1')");
@@ -464,7 +464,7 @@ let A; const setv = (id, v) => { A.ctx.document.getElementById(id).value = v; };
   setv('mw-es', ''); setv('mw-ee', '2026-11-07T10:00'); A.run("mwEditSave('MWE-1')");
   check('editing: the start cannot be blank', A.run("getCase('MWE-1').mw.s") === w.s);
   setv('mw-es', '2026-11-07T11:00'); setv('mw-ee', ''); A.run("mwEditSave('MWE-1')");
-  check('editing: the end can be cleared (then it is required to close)', A.run("getCase('MWE-1').mw.e") === null && J(A.run("JSON.stringify(missingFields(getCase('MWE-1')))")).includes('Maintenance Window end time'));
+  /* Nov 26: Case Details are optional to close */ check('editing: the end can be cleared', A.run("getCase('MWE-1').mw.e") === null);
   A.run("mwEditCancel('MWE-1')");
   check('cancel leaves edit mode', !String(A.els['case-body'].innerHTML).includes('data-dtp="mw-es"'));
   // add new maintenance window (no limit)
@@ -490,7 +490,7 @@ let A; const setv = (id, v) => { A.ctx.document.getElementById(id).value = v; };
   check('case modal uses the new sections', ['High priority account', 'Case ID', 'Owner', 'Case Information', 'Transfer Details', 'Case Details', 'Work / Part Orders', 'Revisit', 'Checklists', 'Case History', 'Close Case'].every(x => mb.includes(x)));
   A.ctx.document.getElementById('close-err').scrollIntoView = () => {};
   A.run("closeCaseAct('MODAL-1')");
-  check('maintenance window end is required to close the case', A.run("getCase('MODAL-1').closed") === false && String(A.els['close-err'].innerHTML).includes('Maintenance Window end time') && A.run("typeof SLA!=='undefined'&&SLA&&SLA.cid==='MODAL-1'") !== true);
+  /* Nov 26: Case Details are optional to close */ check('without a maintenance window end the case can still be closed (Nov 26: goes on to the close step)', !String(A.els['close-err'].innerHTML).includes('Maintenance Window end time'));
   setv('mw-end', '2099-01-01T10:00'); A.run("mwEnd('MODAL-1')");
   check('closing is allowed once the end is set', !J(A.run("JSON.stringify(missingFields(getCase('MODAL-1')))")).includes('Maintenance Window end time'));
   A.run("startSim()");
@@ -957,7 +957,7 @@ let A; const setv = (id, v) => { A.ctx.document.getElementById(id).value = v; };
   {
     A.run("ME={role:'manager',name:'Jeff Bote'};applyMe();CASES.length=0;const c=mkCase('CB-1','Haina Azuela',{caseType:'foundation'});c.sfdc=['SF-1'];c.sev='Sev 2';c.account='Account A';c.cstatus='FE Name';c.model='AP-1';c.mw={s:Date.now(),e:Date.now()+3600000};c.ceArr=Date.now();c.recv=Date.now()-1000;CASES.push(c)");
     const miss = () => J(A.run("JSON.stringify(missingFields(getCase('CB-1')))"));
-    check('without the cabling tick, part ordered and delivered are required', miss().includes('Part Ordered Time') && miss().includes('Part Delivered Time'), miss());
+    /* Nov 26: Case Details are optional to close */ check('part ordered and delivered are optional to close (Nov 26)', !miss().includes('Part Ordered Time') && !miss().includes('Part Delivered Time'), miss());
     A.run("openCaseModal('CB-1')");
     check('the case has a For cabling tick box beside Lift', String(A.els['case-body'].innerHTML).includes('id="cd-cable"') && String(A.els['case-body'].innerHTML).includes('Lift required'));
     check('part dates are open while it is not for cabling', !/data-dtp="cd-pOrd"[^>]*disabled|disabled[^>]*data-dtp="cd-pOrd"/.test(String(A.els['case-body'].innerHTML)));
@@ -966,11 +966,11 @@ let A; const setv = (id, v) => { A.ctx.document.getElementById(id).value = v; };
     const h = String(A.els['case-body'].innerHTML);
     check('part ordered and delivered are greyed out and say they are not needed', /disabled[^>]*data-dtp="cd-pOrd"|data-dtp="cd-pOrd"[^>]*disabled/.test(h) && /disabled[^>]*data-dtp="cd-pDel"|data-dtp="cd-pDel"[^>]*disabled/.test(h) && h.includes('not needed for Cabling/HOD') && h.includes('> Cabling/HOD <'));
     check('CE arrival stays editable', !/disabled[^>]*data-dtp="cd-ceArr"|data-dtp="cd-ceArr"[^>]*disabled/.test(h));
-    check('the store number is required to close a case', miss().includes('Store Number'));
+    /* Nov 26: Case Details are optional to close */ check('the store number is optional to close (Nov 26)', !miss().includes('Store Number'));
     A.run("cdSet('CB-1','store','4521')");
     check('a cabling case can be closed without part ordered and delivered dates', !miss().includes('Part Ordered Time') && !miss().includes('Part Delivered Time') && miss().length === 0, miss());
     A.run("cdCable('CB-1',false)");
-    check('unticking brings the part dates back as required', miss().includes('Part Ordered Time') && miss().includes('Part Delivered Time'));
+    /* Nov 26: Case Details are optional to close */ check('unticking keeps the part dates optional to close (Nov 26)', !miss().includes('Part Ordered Time') && !miss().includes('Part Delivered Time'));
     A.run("closeCase()");
   }
   // ---------- balancing: 50 + 50 + 6 ----------
@@ -1032,13 +1032,13 @@ let A; const setv = (id, v) => { A.ctx.document.getElementById(id).value = v; };
     // Canceled
     st([ag('On Olga', -100, 400)]);
     A.run("CASES.length=0;CASES.push(mkCase('CN-1','On Olga',{}));ME={role:'agent',name:'On Olga'};applyMe();openId='CN-1';renderCase()");
-    check('before Canceled the three times are required', ['Part Ordered Time', 'Part Delivered Time', 'CE Arrival Time'].every(x => A.run("missingFields(getCase('CN-1'))").includes(x)));
+    /* Nov 26: Case Details are optional to close */ check('the three times are optional to close (Nov 26)', !['Part Ordered Time', 'Part Delivered Time', 'CE Arrival Time'].some(x => A.run("missingFields(getCase('CN-1'))").includes(x)));
     A.run("cdSet('CN-1','cstatus','Canceled')");
     const mf = A.run("missingFields(getCase('CN-1'))"), hc = String(A.els['case-body'].innerHTML);
     check('Canceled: part ordered, part delivered and CE arrival are not required', !['Part Ordered Time', 'Part Delivered Time', 'CE Arrival Time'].some(x => mf.includes(x)));
     check('Canceled: the three time fields are greyed out', ['pOrd', 'pDel', 'ceArr'].every(k => new RegExp('disabled[^>]*data-dtp="cd-' + k + '"|data-dtp="cd-' + k + '"[^>]*disabled').test(hc)) && hc.includes('not needed (canceled)'));
     A.run("cdSet('CN-1','cstatus','Scheduled')");
-    check('changing the status back makes them required again', A.run("missingFields(getCase('CN-1'))").includes('CE Arrival Time') && !String(A.els['case-body'].innerHTML).includes('not needed (canceled)'));
+    /* Nov 26: Case Details are optional to close */ check('changing the status back removes the canceled note', !String(A.els['case-body'].innerHTML).includes('not needed (canceled)'));
   }
   // ---------- new case entries: bold, blinking New, on top ----------
   {
@@ -1642,7 +1642,7 @@ let A; const setv = (id, v) => { A.ctx.document.getElementById(id).value = v; };
     // store number
     A.run("ME={role:'manager',name:'Jeff Bote'};applyMe();openId='FT-0';renderCase()");
     const cb = String(A.els['case-body'].innerHTML);
-    check('case details: Store number beside Account name, marked required', /Account name<\/label>[\s\S]{0,400}Store number <span class="text-red-600">\*<\/span>/.test(cb) && cb.includes('id="cd-store-mode"') && cb.includes('>N/A</option>') && cb.includes('>Type store number</option>'));
+    /* Nov 26: Case Details are optional to close */ check('case details: Store number beside Account name, marked optional', /Account name<\/label>[\s\S]{0,400}Store number <span class="font-medium text-gray-400">\(optional\)<\/span>/.test(cb) && cb.includes('id="cd-store-mode"') && cb.includes('>N/A</option>') && cb.includes('>Type store number</option>'));
     A.run("cdSet('FT-0','store','7788');getCase('FT-0').account='Account A';openId=null");
     check('the store number is saved and logged in Case History', A.run("getCase('FT-0').store") === '7788' && A.run("getCase('FT-0').log.some(l=>l.action==='Store number updated'&&l.details==='7788')") === true);
     check('Weekly report: the Account Name column shows the store number', A.run("RF('account').g(getCase('FT-0'))") === '7788' && htmlSrc.includes("x.value=k==='account'?acctCol(cs):rv(rw,k);"));

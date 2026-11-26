@@ -20,7 +20,7 @@ const SHOTS = process.env.SHOTS || '/home/claude/build';
   let r = await p.evaluate(() => ({ t: [stnCloseWhy(getCase('T-PSE')), missingFields(getCase('T-PSE'))], n: [stnCloseWhy(getCase('N-PSE')), missingFields(getCase('N-PSE'))], f: [stnCloseWhy(getCase('N-FUL')), missingFields(getCase('N-FUL'))], tc: stnCloseWhy(getCase('T-CARE')), cw: stnCloseWhy(getCase('C-WFM')) }));
   ok(r.t[0] === '' && r.t[1].length === 0, 'troubleshooting only at PSE: can be closed, nothing else required ' + JSON.stringify(r.t));
   ok(/FULFILLMENT first/.test(r.n[0]), 'not ticked, at PSE: cannot be closed yet (normal order, close at FULFILLMENT)');
-  ok(r.f[0] === '' && r.f[1].includes('Maintenance Window') && r.f[1].includes('Part Ordered Time') && r.f[1].includes('CE Arrival Time'), 'not ticked, at FULFILLMENT: closing needs the maintenance window, parts and CE arrival as before ' + JSON.stringify(r.f[1]));
+  ok(r.f[0] === '' && r.f[1].length === 0, 'not ticked, at FULFILLMENT: can be closed; Case Details (maintenance window, parts, CE arrival) are optional (Nov 26) ' + JSON.stringify(r.f[1]));
   ok(/transfer the case to PSE first/.test(r.tc), 'troubleshooting only but still in CARE: transfer to PSE first');
   ok(r.cw === '', 'a Canceled case can still be closed in any station');
   r = await p.evaluate(() => { window.__sla = []; closeCaseAct('N-PSE'); const a = window.__sla.length; closeCaseAct('T-PSE'); return [a, window.__sla.join()]; });

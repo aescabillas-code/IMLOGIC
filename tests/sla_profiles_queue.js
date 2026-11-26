@@ -63,7 +63,7 @@ const SHOTS = process.env.SHOTS || '/home/claude/build';
   });
   ok(r.own === 'Queue' && r.q && r.q.from === 'Ann Old' && r.held && r.st === 'Customer Hold', 'Customer Hold case at its owner\'s EOS with nobody available goes to the Queue (still on hold) ' + JSON.stringify([r.own, r.q]));
   ok(/reached end of shift \(EOS\) and no agent is available: case moved to the Queue/.test(r.log), 'the history says why it is in the Queue');
-  ok(/Queue · 2 cases waiting for an available agent/.test(r.strip) && /EOS of Ann Old/.test(r.strip) && /new case/.test(r.strip), 'the Queue is shown under the station tiles with the reason and waiting time');
+  ok(/^\s*2\s+⏳ cases are waiting in the Queue/.test(r.strip) && !/HOLD-1|NEW-1/.test(r.strip), 'the Queue under the station tiles shows only how many cases wait (no case numbers) ' + JSON.stringify(r.strip));
   await p.evaluate(() => { const q = document.getElementById('q-strip'); if (q) q.scrollIntoView({ block: 'center' }); });
   await p.screenshot({ path: SHOTS + '/s18_queue.png' });
   r = await p.evaluate(async () => { pers('Cy Busy').status = 'available'; pers('Cy Busy').availAt = Date.now(); await new Promise(r => setTimeout(r, 2500)); const c = getCase('HOLD-1'), n = getCase('NEW-1'); return { own: c.owner, q: c.qho, ho: isHo(c), log: c.log[0].details, nown: n.owner, ncred: n.credit && n.credit.n, strip: (document.getElementById('q-strip') || {}).innerText || '' }; });
